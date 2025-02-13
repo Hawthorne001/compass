@@ -216,7 +216,7 @@ export const runAIPipelineGeneration = (
       preferences,
       logger: { log, mongoLogId },
       track,
-      connectionInfoAccess,
+      connectionInfoRef,
     }
   ) => {
     const {
@@ -228,12 +228,14 @@ export const runAIPipelineGeneration = (
       dataService: { dataService },
     } = getState();
 
-    const connectionInfo = connectionInfoAccess.getCurrentConnectionInfo();
+    const connectionInfo = connectionInfoRef.current;
 
     const provideSampleDocuments =
       preferences.getPreferences().enableGenAISampleDocumentPassing;
 
-    const editor_view_type = pipelineMode === 'builder-ui' ? 'stages' : 'text';
+    const editor_view_type: 'stages' | 'text' =
+      pipelineMode === 'builder-ui' ? 'stages' : 'text';
+
     if (existingRequestId !== null) {
       // Cancel the active request as this one will override.
       abort(existingRequestId);
@@ -279,20 +281,23 @@ export const runAIPipelineGeneration = (
 
       const { collection: collectionName, database: databaseName } =
         toNS(namespace);
-      jsonResponse = await atlasAiService.getAggregationFromUserInput({
-        signal: abortController.signal,
-        userInput,
-        collectionName,
-        databaseName,
-        schema,
-        // Provide sample documents when the user has opted in in their settings.
-        ...(provideSampleDocuments
-          ? {
-              sampleDocuments,
-            }
-          : undefined),
-        requestId,
-      });
+      jsonResponse = await atlasAiService.getAggregationFromUserInput(
+        {
+          signal: abortController.signal,
+          userInput,
+          collectionName,
+          databaseName,
+          schema,
+          // Provide sample documents when the user has opted in in their settings.
+          ...(provideSampleDocuments
+            ? {
+                sampleDocuments,
+              }
+            : undefined),
+          requestId,
+        },
+        connectionInfo
+      );
     } catch (err: any) {
       if (signal.aborted) {
         // If we already aborted so we ignore the error.
@@ -442,10 +447,10 @@ export const resetIsAggregationGeneratedFromQuery =
   };
 
 export const showInput = (): PipelineBuilderThunkAction<Promise<void>> => {
-  return async (dispatch, _getState, { atlasAuthService }) => {
+  return async (dispatch, _getState, { atlasAiService }) => {
     try {
       if (process.env.COMPASS_E2E_SKIP_ATLAS_SIGNIN !== 'true') {
-        await atlasAuthService.signIn({ promptType: 'ai-promo-modal' });
+        await atlasAiService.ensureAiFeatureAccess();
       }
       dispatch({
         type: AIPipelineActionTypes.ShowInput,

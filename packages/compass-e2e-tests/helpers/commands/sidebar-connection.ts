@@ -1,56 +1,44 @@
-import { TEST_MULTIPLE_CONNECTIONS } from '../compass';
 import type { CompassBrowser } from '../compass-browser';
 import * as Selectors from '../selectors';
 
 export async function getConnectionIdByName(
   browser: CompassBrowser,
   connectionName: string
-): Promise<string | undefined> {
-  if (!TEST_MULTIPLE_CONNECTIONS) {
-    // the connection id isn't somewhere we can consistently access it in the
-    // single connection world
-    return undefined;
-  }
+): Promise<string> {
+  const connections = browser.$$(Selectors.sidebarConnection(connectionName));
 
-  const connections = await browser.$$(
-    Selectors.sidebarConnection(connectionName)
-  );
+  const numConnections = await connections.length;
 
-  if (connections.length !== 1) {
+  if (numConnections !== 1) {
     throw new Error(
-      `Found ${connections.length} connections named ${connectionName}.`
+      `Found ${numConnections} connections named ${connectionName}.`
     );
   }
 
-  return await browser
+  const connectionId = await browser
     .$(Selectors.sidebarConnection(connectionName))
     .getAttribute('data-connection-id');
+
+  if (!connectionId) {
+    throw new Error(
+      `Could not find connection id for connection ${connectionName}`
+    );
+  }
+
+  return connectionId;
 }
 
 export async function selectConnection(
   browser: CompassBrowser,
   connectionName: string
 ): Promise<void> {
-  if (TEST_MULTIPLE_CONNECTIONS) {
-    await browser.selectConnectionMenuItem(
-      connectionName,
-      Selectors.Multiple.EditConnectionItem
-    );
-  } else {
-    await browser.pause(1000);
-
-    await browser.clickVisible(
-      Selectors.sidebarConnectionButton(connectionName),
-      {
-        screenshot: `selecting-connection-${connectionName}.png`,
-      }
-    );
-  }
+  await browser.selectConnectionMenuItem(
+    connectionName,
+    Selectors.EditConnectionItem
+  );
 
   await browser.waitUntil(async () => {
-    const connectionTitleSelector = TEST_MULTIPLE_CONNECTIONS
-      ? Selectors.ConnectionModalTitle
-      : Selectors.ConnectionTitle;
+    const connectionTitleSelector = Selectors.ConnectionModalTitle;
 
     const text = await browser.$(connectionTitleSelector).getText();
     return text === connectionName;
@@ -63,10 +51,6 @@ export async function selectConnectionMenuItem(
   itemSelector: string,
   openMenu = true
 ) {
-  const Sidebar = TEST_MULTIPLE_CONNECTIONS
-    ? Selectors.Multiple
-    : Selectors.Single;
-
   const selector = Selectors.sidebarConnection(connectionName);
 
   await browser.waitUntil(async () => {
@@ -82,7 +66,7 @@ export async function selectConnectionMenuItem(
     await browser.$(selector).waitForDisplayed();
 
     // workaround for weirdness in the ItemActionControls menu opener icon
-    await browser.clickVisible(Sidebar.ConnectionsTitle);
+    await browser.clickVisible(Selectors.ConnectionsTitle);
 
     // Hover over an arbitrary other element to ensure that the second hover will
     // actually be a fresh one. This otherwise breaks if this function is called
@@ -98,7 +82,7 @@ export async function selectConnectionMenuItem(
     await browser.clickVisible(
       Selectors.sidebarConnectionMenuButton(connectionName)
     );
-    await browser.$(Sidebar.ConnectionMenu).waitForDisplayed();
+    await browser.$(Selectors.ConnectionMenu).waitForDisplayed();
   }
 
   await browser.clickVisible(itemSelector);
@@ -107,13 +91,14 @@ export async function selectConnectionMenuItem(
 export async function removeConnection(
   browser: CompassBrowser,
   connectionName: string
-): Promise<void> {
-  if (!TEST_MULTIPLE_CONNECTIONS) {
-    return;
-  }
-
+): Promise<boolean> {
   // make sure there's no filter because if the connection is not displayed then we can't remove it
-  if (await browser.$(Selectors.SidebarFilterInput).isExisting()) {
+  if (
+    (await browser.$(Selectors.SidebarFilterInput).isExisting()) &&
+    (await browser
+      .$(Selectors.SidebarFilterInput)
+      .getAttribute('aria-disabled')) !== 'true'
+  ) {
     await browser.clickVisible(Selectors.SidebarFilterInput);
     await browser.setValueVisible(Selectors.SidebarFilterInput, '');
 
@@ -126,10 +111,12 @@ export async function removeConnection(
   if (await browser.$(selector).isExisting()) {
     await browser.selectConnectionMenuItem(
       connectionName,
-      Selectors.Multiple.RemoveConnectionItem
+      Selectors.RemoveConnectionItem
     );
     await browser.$(selector).waitForExist({ reverse: true });
+    return true;
   }
+  return false;
 }
 
 export async function hasConnectionMenuItem(
@@ -153,12 +140,12 @@ export async function hasConnectionMenuItem(
     await browser.$(selector).waitForDisplayed();
 
     // workaround for weirdness in the ItemActionControls menu opener icon
-    await browser.clickVisible(Selectors.Multiple.ConnectionsTitle);
+    await browser.clickVisible(Selectors.ConnectionsTitle);
 
     // Hover over an arbitrary other element to ensure that the second hover will
     // actually be a fresh one. This otherwise breaks if this function is called
     // twice in a row.
-    await browser.hover(`*:not(${selector}, ${selector} *)`);
+    await browser.hover(Selectors.ConnectionsTitle);
 
     await browser.hover(selector);
     return false;
@@ -169,7 +156,7 @@ export async function hasConnectionMenuItem(
     await browser.clickVisible(
       Selectors.sidebarConnectionMenuButton(connectionName)
     );
-    await browser.$(Selectors.Multiple.ConnectionMenu).waitForDisplayed();
+    await browser.$(Selectors.ConnectionMenu).waitForDisplayed();
   }
 
   return await browser.$(itemSelector).isExisting();

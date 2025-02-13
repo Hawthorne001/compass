@@ -8,11 +8,11 @@ import {
   screenshotIfFailed,
   skipForWeb,
   TEST_COMPASS_WEB,
-  TEST_MULTIPLE_CONNECTIONS,
 } from '../helpers/compass';
 import type { Compass } from '../helpers/compass';
 import * as Selectors from '../helpers/selectors';
 import type { ConnectFormState } from '../helpers/connect-form-state';
+import { context } from '../helpers/test-runner-context';
 
 const DEFAULT_FLE_ENCRYPTED_FIELDS_MAP =
   "{\n/**\n * // Client-side encrypted fields map configuration:\n * 'database.collection': {\n *   fields: [\n *     {\n *       keyId: UUID(\"...\"),\n *       path: '...',\n *       bsonType: '...',\n *       queries: [{ queryType: 'equality' }]\n *     }\n *   ]\n * }\n */\n}\n";
@@ -22,7 +22,10 @@ describe('Connection form', function () {
   let browser: CompassBrowser;
 
   before(async function () {
-    skipForWeb(this, 'no connect form in compass-web');
+    skipForWeb(
+      this,
+      'connection form is not used meaningfully outside of the local dev sandbox environment'
+    );
 
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
@@ -58,16 +61,12 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     expect(state).to.deep.equal(expectedState);
   });
@@ -92,21 +91,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState();
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(
       await browser.$(Selectors.ConnectionFormStringInput).getValue()
@@ -131,21 +127,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017,127.0.0.1:27091',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017,127.0.0.1:27091';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState();
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(
       await browser.$(Selectors.ConnectionFormStringInput).getValue()
@@ -170,21 +163,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState();
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(
       await browser.$(Selectors.ConnectionFormStringInput).getValue()
@@ -215,21 +205,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(true);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       connectionString
@@ -260,17 +247,13 @@ describe('Connection form', function () {
       tlsInsecure: true,
       tlsAllowInvalidHostnames: true,
       tlsAllowInvalidCertificates: true,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     await browser.setValueVisible(
       Selectors.ConnectionFormStringInput,
@@ -283,30 +266,11 @@ describe('Connection form', function () {
     expectedState.tlsCAFile = tlsCAFile;
     expectedState.tlsCertificateKeyFile = tlsCertificateKeyFile;
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       connectionString
     );
-  });
-
-  it('parses and formats a URI for TLS with system CA', async function () {
-    const fixturesPath = path.resolve(__dirname, '..', 'fixtures');
-    const tlsCAFile = path.join(fixturesPath, 'ca.pem');
-
-    await browser.setConnectFormState({
-      hosts: ['localhost:27017'],
-      sslConnection: 'ON',
-      tlsCAFile,
-      useSystemCA: true,
-    });
-
-    const state = await browser.getConnectFormState();
-    expect(state.tlsCAFile).to.equal(undefined); // tlsCAFile is unset by useSystemCA
-    expect(state.useSystemCA).to.equal(true);
-
-    expect(
-      await browser.$(Selectors.ConnectionFormStringInput).getValue()
-    ).to.equal('mongodb://localhost:27017/?tls=true');
   });
 
   it('parses and formats a URI for Kerberos authentication', async function () {
@@ -333,21 +297,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState();
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(
       await browser.$(Selectors.ConnectionFormStringInput).getValue()
@@ -375,21 +336,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(true);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       connectionString
@@ -419,21 +377,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(true);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       connectionString
@@ -465,21 +420,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(true);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       connectionString
@@ -506,7 +458,6 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'primary',
       replicaSet: 'replica-set',
       defaultDatabase: 'default-db',
@@ -516,17 +467,15 @@ describe('Connection form', function () {
       },
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState();
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(
       await browser.$(Selectors.ConnectionFormStringInput).getValue()
@@ -559,16 +508,12 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     expect(await browser.getConnectFormState()).to.deep.equal(expectedState);
   });
@@ -606,16 +551,12 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     expect(await browser.getConnectFormState()).to.deep.equal(expectedState);
   });
@@ -651,21 +592,18 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(false);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(false)).to.equal(
       redactedConnectionString
@@ -676,25 +614,20 @@ describe('Connection form', function () {
     const favoriteName = 'My Favorite';
     const newFavoriteName = 'My Favorite (edited)';
 
-    const Sidebar = TEST_MULTIPLE_CONNECTIONS
-      ? Selectors.Multiple
-      : Selectors.Single;
-
     // save
-    await browser.saveFavorite(
-      favoriteName,
-      TEST_MULTIPLE_CONNECTIONS ? 'Red' : 'color1'
-    );
+    await browser.saveFavorite(favoriteName, 'Green');
 
-    if (process.env.COMPASS_E2E_DISABLE_CLIPBOARD_USAGE !== 'true') {
+    if (!context.disableClipboardUsage) {
       // copy the connection string
       await browser.selectConnectionMenuItem(
         favoriteName,
-        Sidebar.CopyConnectionStringItem
+        Selectors.CopyConnectionStringItem
       );
       await browser.waitUntil(
         async () => {
-          return (await clipboard.read()) === 'mongodb://localhost:27017/';
+          return /^mongodb:\/\/localhost:27017\/?$/.test(
+            await clipboard.read()
+          );
         },
         { timeoutMsg: 'Expected copy to clipboard to work' }
       );
@@ -703,27 +636,22 @@ describe('Connection form', function () {
     // duplicate
     await browser.selectConnectionMenuItem(
       favoriteName,
-      Sidebar.DuplicateConnectionItem
+      Selectors.DuplicateConnectionItem
     );
 
-    // duplicating opens the modal, in multiple connections you have to save
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      await browser.clickVisible(Selectors.ConnectionModalSaveButton);
-    }
+    // duplicating opens the modal you have to save
+    await browser.clickVisible(Selectors.ConnectionModalSaveButton);
 
     // delete the duplicate
     await browser.selectConnectionMenuItem(
       `${favoriteName} (1)`,
-      Sidebar.RemoveConnectionItem
+      Selectors.RemoveConnectionItem
     );
 
     // edit the original
     await browser.selectConnection(favoriteName);
 
-    await browser.saveFavorite(
-      newFavoriteName,
-      TEST_MULTIPLE_CONNECTIONS ? 'Pink' : 'color2'
-    );
+    await browser.saveFavorite(newFavoriteName, 'Pink');
 
     // it should now be updated in the sidebar
     await browser
@@ -731,27 +659,16 @@ describe('Connection form', function () {
       .waitForDisplayed();
 
     // open the modal so we can perform some actions in there
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      await browser.selectConnection(newFavoriteName);
-    }
+    await browser.selectConnection(newFavoriteName);
 
     // the edit the connection string toggle should be on (because this is a new connection we just saved)
-    const toggle = await browser.$(Selectors.EditConnectionStringToggle);
+    const toggle = browser.$(Selectors.EditConnectionStringToggle);
     expect(await toggle.getAttribute('aria-checked')).to.equal('true');
 
     // toggle the edit connection string toggle twice
     await browser.clickVisible(Selectors.EditConnectionStringToggle);
     expect(await toggle.getAttribute('aria-checked')).to.equal('false');
-    await browser.clickVisible(Selectors.EditConnectionStringToggle);
-
-    const confirmModal = await browser.$(Selectors.ConfirmationModal);
-    await confirmModal.waitForDisplayed();
-
-    await browser.screenshot('edit-uri-confirmation-modal.png');
-
-    await browser.clickVisible(Selectors.confirmationModalConfirmButton());
-
-    await confirmModal.waitForDisplayed({ reverse: true });
+    await browser.clickConfirmationAction(Selectors.EditConnectionStringToggle);
 
     // the toggle should now be on
     expect(await toggle.getAttribute('aria-checked')).to.equal('true');
@@ -778,34 +695,27 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
       readPreference: 'defaultReadPreference',
       fleStoreCredentials: false,
       fleEncryptedFieldsMap: DEFAULT_FLE_ENCRYPTED_FIELDS_MAP,
+      connectionName: 'localhost:27017',
+      connectionColor: 'no-color',
+      connectionFavorite: false,
     };
-
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      expectedState.connectionName = 'localhost:27017';
-      expectedState.connectionColor = 'no-color';
-      expectedState.connectionFavorite = false;
-    }
 
     const state = await browser.getConnectFormState(true);
     expect(state).to.deep.equal(expectedState);
 
+    delete expectedState.connectionString;
+
+    delete expectedState.connectionString;
     await browser.setConnectFormState(expectedState);
     expect(await browser.getConnectFormConnectionString(true)).to.equal(
       `${connectionString}&authSource=%24external`
     );
   });
 
-  it('supports saving a favorite (multiple connections)', async function () {
-    if (!TEST_MULTIPLE_CONNECTIONS) {
-      // this will remain skipped until we remove the test because the test is
-      // now for the multiple connections case only
-      this.skip();
-    }
-
+  it('supports saving a favorite', async function () {
     const state: ConnectFormState = {
       connectionName: 'my-connection',
       connectionColor: 'Red',
@@ -814,7 +724,7 @@ describe('Connection form', function () {
     await browser.setConnectFormState(state);
     expect(await browser.getConnectFormState()).to.deep.equal({
       authMethod: 'DEFAULT',
-      connectionColor: 'color1',
+      connectionColor: 'color6',
       connectionFavorite: true,
       connectionName: 'my-connection',
       connectionString: 'mongodb://localhost:27017/',
@@ -831,56 +741,6 @@ describe('Connection form', function () {
       tlsAllowInvalidCertificates: false,
       tlsAllowInvalidHostnames: false,
       tlsInsecure: false,
-      useSystemCA: false,
     });
-  });
-
-  it('supports saving a favorite (single connection)', async function () {
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // this will remain skipped until we remove the test because the test is
-      // now for the single connection case only
-      this.skip();
-    }
-
-    const favoriteName = 'My New Favorite';
-
-    // Fill in a valid URI
-    await browser.setValueVisible(
-      Selectors.ConnectionFormStringInput,
-      'mongodb://127.0.0.1:27091/test'
-    );
-
-    // Save & Connect
-    await browser.clickVisible(Selectors.SaveAndConnectButton);
-
-    // Fill out the favorite info
-    await browser.$(Selectors.FavoriteModal).waitForDisplayed();
-    await browser.setValueVisible(Selectors.FavoriteNameInput, favoriteName);
-    await browser.clickVisible(
-      `${Selectors.FavoriteColorSelector} [data-testid="color-pick-color2"]`
-    );
-
-    // The modal's button text should read Save & Connect and not the default Save
-    expect(await browser.$(Selectors.FavoriteSaveButton).getText()).to.equal(
-      'Save & Connect'
-    );
-
-    await browser.$(Selectors.FavoriteSaveButton).waitForEnabled();
-
-    await browser.screenshot('save-favorite-modal-new.png');
-
-    await browser.clickVisible(Selectors.FavoriteSaveButton);
-    await browser.$(Selectors.FavoriteModal).waitForExist({ reverse: true });
-
-    // Wait for it to connect
-    const element = await browser.$(Selectors.MyQueriesList);
-    await element.waitForDisplayed();
-
-    // It should use the new favorite name as the connection name in the top-left corner
-    expect(await browser.$(Selectors.SidebarTitle).getText()).to.equal(
-      favoriteName
-    );
-
-    await browser.disconnectAll();
   });
 });

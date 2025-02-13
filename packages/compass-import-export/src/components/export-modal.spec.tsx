@@ -1,6 +1,10 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import {
+  cleanup,
+  render,
+  screen,
+  userEvent,
+} from '@mongodb-js/testing-library-compass';
 import { expect } from 'chai';
 import { configureStore } from '../stores/export-store';
 import { ExportModal } from './export-modal';
@@ -9,7 +13,6 @@ import { closeExport, openExport } from '../modules/export';
 
 import { createNoopLogger } from '@mongodb-js/compass-logging/provider';
 import { createNoopTrack } from '@mongodb-js/compass-telemetry/provider';
-import { type ConnectionRepository } from '@mongodb-js/compass-connections/provider';
 
 function renderModal(exportState: any = {}) {
   // TODO: mutating state directly doesn't guarantee that we are testing the
@@ -21,9 +24,9 @@ function renderModal(exportState: any = {}) {
     globalAppRegistry: {},
     logger: createNoopLogger(),
     track: createNoopTrack(),
-    connectionRepository: {
-      getConnectionInfoById: () => ({ id: 'TEST' }),
-    } as unknown as ConnectionRepository,
+    connections: {
+      getConnectionById: () => ({ info: { id: 'TEST' } }),
+    },
   } as any);
   const state = store.getState();
   state.export = {

@@ -11,12 +11,11 @@ const yargs = require('yargs')
   .command(require('./commands/info'))
   .command(require('./commands/upload'))
   .command(require('./commands/download'))
-  .command(require('./commands/verify'))
   .demand(1, 'Please specify a command.')
   .strict()
   .env()
   .help('help')
-  .fail(function(msg, err) {
+  .fail(function (msg, err) {
     cli.abortIfError(err);
     cli.error(`${msg}\n\n`);
     yargs.showHelp();

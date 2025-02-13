@@ -3,14 +3,12 @@ import thunk from 'redux-thunk';
 import { HistoryStorage } from './modules/history-storage';
 import { type Logger } from '@mongodb-js/compass-logging/provider';
 import type {
-  ConnectionInfoAccess,
+  ConnectionInfoRef,
   DataService,
 } from '@mongodb-js/compass-connections/provider';
 import type { PreferencesAccess } from 'compass-preferences-model';
-import { usePreference } from 'compass-preferences-model/provider';
 import type { TrackFunction } from '@mongodb-js/compass-telemetry';
 import TabShell from './components/compass-shell/tab-compass-shell';
-import Shell from './components/compass-shell/compass-shell';
 import { applyMiddleware, createStore } from 'redux';
 import reducer, {
   createAndStoreRuntime,
@@ -24,18 +22,15 @@ import { Theme, ThemeProvider } from '@mongodb-js/compass-components';
 const SHELL_THEME = { theme: Theme.Dark, enabled: true };
 
 type ShellPluginProps = {
+  runtimeId?: string;
   initialEvaluate?: string | string[];
   initialInput?: string;
 };
 
 export function ShellPlugin(props: ShellPluginProps) {
-  const multiConnectionsEnabled = usePreference(
-    'enableNewMultipleConnectionSystem'
-  );
-  const ShellComponent = multiConnectionsEnabled ? TabShell : Shell;
   return (
     <ThemeProvider theme={SHELL_THEME}>
-      <ShellComponent {...props} />
+      <TabShell {...props} />
     </ThemeProvider>
   );
 }
@@ -45,7 +40,7 @@ export type ShellPluginServices = {
   track: TrackFunction;
   dataService: DataService;
   preferences: PreferencesAccess;
-  connectionInfo: ConnectionInfoAccess;
+  connectionInfo: ConnectionInfoRef;
 };
 
 export type ShellPluginExtraArgs = ShellPluginServices & {
@@ -53,7 +48,7 @@ export type ShellPluginExtraArgs = ShellPluginServices & {
 };
 
 export function onActivated(
-  _initialProps: ShellPluginProps,
+  initialProps: ShellPluginProps,
   services: ShellPluginServices,
   { addCleanup, cleanup }: ActivateHelpers
 ) {
@@ -63,7 +58,8 @@ export function onActivated(
     reducer,
     {
       runtimeId: preferences.getPreferences().enableShell
-        ? createAndStoreRuntime(dataService, logger, track, connectionInfo).id
+        ? initialProps.runtimeId ??
+          createAndStoreRuntime(dataService, logger, track, connectionInfo).id
         : null,
       history: null,
     },

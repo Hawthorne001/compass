@@ -6,7 +6,6 @@ import {
   positionalArgs,
   skipForWeb,
   TEST_COMPASS_WEB,
-  TEST_MULTIPLE_CONNECTIONS,
   Selectors,
   connectionNameFromString,
 } from '../helpers/compass';
@@ -42,22 +41,27 @@ describe('forceConnectionOptions', function () {
   });
 
   it('forces the value of a specific connection option', async function () {
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // open the connection modal because that's where the warnings will be displayed
-      await browser.clickVisible(Selectors.Multiple.SidebarNewConnectionButton);
-    }
+    // open the connection modal because that's where the warnings will be displayed
+    await browser.clickVisible(Selectors.SidebarNewConnectionButton);
 
-    const warnings = await browser
-      .$('[data-testid="connection-warnings-summary"]')
-      .getText();
-    expect(warnings.trim()).to.equal(
-      'Some connection options have been overridden through settings: appName'
+    await browser.waitUntil(
+      async () => {
+        const warnings = await browser
+          .$('[data-testid="connection-warnings-summary"]')
+          .getText();
+
+        return (
+          warnings.trim() ===
+          'Some connection options have been overridden through settings: appName'
+        );
+      },
+      {
+        timeoutMsg: 'Expected connection warnings to mention overriden options',
+      }
     );
 
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // close the modal again so connectWithConnectionString sees the expected state
-      await browser.clickVisible(Selectors.ConnectionModalCloseButton);
-    }
+    // close the modal again so connectWithConnectionString sees the expected state
+    await browser.clickVisible(Selectors.ConnectionModalCloseButton);
 
     const connectionString =
       'mongodb://127.0.0.1:27091/?appName=userSpecifiedAppName';

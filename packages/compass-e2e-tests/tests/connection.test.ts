@@ -13,10 +13,9 @@ import {
   serverSatisfies,
   skipForWeb,
   TEST_COMPASS_WEB,
-  TEST_MULTIPLE_CONNECTIONS,
   connectionNameFromString,
-  DEFAULT_CONNECTION_NAME,
-  MONGODB_TEST_SERVER_PORT,
+  DEFAULT_CONNECTION_NAME_1,
+  DEFAULT_CONNECTION_STRING_1,
 } from '../helpers/compass';
 import type { Compass } from '../helpers/compass';
 import type { ConnectFormState } from '../helpers/connect-form-state';
@@ -40,7 +39,7 @@ function hasAtlasEnvironmentVariables(): boolean {
     'E2E_TESTS_FREE_TIER_HOST',
     'E2E_TESTS_ATLAS_USERNAME',
     'E2E_TESTS_ATLAS_PASSWORD',
-    'E2E_TESTS_ATLAS_X509_PEM',
+    'E2E_TESTS_ATLAS_X509_PEM_BASE64',
     'E2E_TESTS_ATLAS_IAM_ACCESS_KEY_ID',
     'E2E_TESTS_ATLAS_IAM_SECRET_ACCESS_KEY',
     'E2E_TESTS_ATLAS_IAM_TEMP_ROLE_ARN',
@@ -161,18 +160,18 @@ async function assertCannotInsertData(
 
   // browse to the "Insert to Collection" modal
   await browser.clickVisible(Selectors.AddDataButton);
-  const insertDocumentOption = await browser.$(Selectors.InsertDocumentOption);
+  const insertDocumentOption = browser.$(Selectors.InsertDocumentOption);
   await insertDocumentOption.waitForDisplayed();
   await browser.clickVisible(Selectors.InsertDocumentOption);
 
   // wait for the modal to appear
-  const insertDialog = await browser.$(Selectors.InsertDialog);
+  const insertDialog = browser.$(Selectors.InsertDialog);
   await insertDialog.waitForDisplayed();
 
   // go with the default text which should just be a random new id and therefore valid
 
   // confirm
-  const insertConfirm = await browser.$(Selectors.InsertConfirm);
+  const insertConfirm = browser.$(Selectors.InsertConfirm);
   // this selector is very brittle, so just make sure it works
   expect(await insertConfirm.isDisplayed()).to.be.true;
   expect(await insertConfirm.getText()).to.equal('Insert');
@@ -180,7 +179,7 @@ async function assertCannotInsertData(
   await browser.clickVisible(Selectors.InsertConfirm);
 
   // make sure that there's an error and that the insert button is disabled
-  const errorElement = await browser.$(Selectors.InsertDialogErrorMessage);
+  const errorElement = browser.$(Selectors.InsertDialogErrorMessage);
   await errorElement.waitForDisplayed();
   expect(await errorElement.getText()).to.contain(
     `not authorized on ${dbName} to execute command`
@@ -197,47 +196,35 @@ async function assertCannotCreateDb(
   dbName: string,
   collectionName: string
 ): Promise<void> {
-  const Sidebar = TEST_MULTIPLE_CONNECTIONS
-    ? Selectors.Multiple
-    : Selectors.Single;
-
-  if (TEST_MULTIPLE_CONNECTIONS) {
-    // navigate to the databases tab so that the connection is
-    // active/highlighted and then the add button and three dot menu will
-    // display without needing to hover
-    await browser.navigateToConnectionTab(connectionName, 'Databases');
-  }
+  // navigate to the databases tab so that the connection is
+  // active/highlighted and then the add button and three dot menu will
+  // display without needing to hover
+  await browser.navigateToConnectionTab(connectionName, 'Databases');
 
   // open the create database modal from the sidebar
-  if (TEST_MULTIPLE_CONNECTIONS) {
-    await browser.selectConnectionMenuItem(
-      connectionName,
-      Sidebar.CreateDatabaseButton,
-      false
-    );
-  } else {
-    await browser.clickVisible(Sidebar.CreateDatabaseButton);
-  }
+  await browser.selectConnectionMenuItem(
+    connectionName,
+    Selectors.CreateDatabaseButton,
+    false
+  );
 
-  const createModalElement = await browser.$(Selectors.CreateDatabaseModal);
+  const createModalElement = browser.$(Selectors.CreateDatabaseModal);
   await createModalElement.waitForDisplayed();
   await browser.setValueVisible(Selectors.CreateDatabaseDatabaseName, dbName);
   await browser.setValueVisible(
     Selectors.CreateDatabaseCollectionName,
     collectionName
   );
-  const createButton = await browser.$(Selectors.CreateDatabaseCreateButton);
+  const createButton = browser.$(Selectors.CreateDatabaseCreateButton);
   await createButton.waitForEnabled();
   await createButton.click();
 
   // an error should appear
-  const errorElement = await browser.$(Selectors.CreateDatabaseErrorMessage);
+  const errorElement = browser.$(Selectors.CreateDatabaseErrorMessage);
   await errorElement.waitForDisplayed();
   expect(await errorElement.getText()).to.contain(
     `not authorized on ${dbName} to execute command`
   );
-
-  await browser.screenshot('create-database-modal-error.png');
 
   // cancel and wait for the modal to go away
   await browser.clickVisible(Selectors.CreateDatabaseCancelButton);
@@ -255,14 +242,12 @@ async function assertCannotCreateCollection(
   // open create collection modal from the sidebar
   await browser.clickVisible(Selectors.SidebarFilterInput);
   await browser.setValueVisible(Selectors.SidebarFilterInput, dbName);
-  const dbElement = await browser.$(
-    Selectors.sidebarDatabase(connectionId, dbName)
-  );
+  const dbElement = browser.$(Selectors.sidebarDatabase(connectionId, dbName));
   await dbElement.waitForDisplayed();
   await browser.hover(Selectors.sidebarDatabase(connectionId, dbName));
   await browser.clickVisible(Selectors.CreateCollectionButton);
 
-  const createModalElement = await browser.$(Selectors.CreateCollectionModal);
+  const createModalElement = browser.$(Selectors.CreateCollectionModal);
   await createModalElement.waitForDisplayed();
   await browser.setValueVisible(
     Selectors.CreateDatabaseCollectionName,
@@ -272,17 +257,21 @@ async function assertCannotCreateCollection(
   await browser.clickVisible(Selectors.CreateCollectionCreateButton);
 
   // an error should appear
-  const errorElement = await browser.$(Selectors.CreateCollectionErrorMessage);
+  const errorElement = browser.$(Selectors.CreateCollectionErrorMessage);
   await errorElement.waitForDisplayed();
   expect(await errorElement.getText()).to.contain(
     `not authorized on ${dbName} to execute command`
   );
 
-  await browser.screenshot('create-collection-modal-error.png');
-
   // cancel and wait for the modal to go away
   await browser.clickVisible(Selectors.CreateCollectionCancelButton);
   await createModalElement.waitForDisplayed({ reverse: true });
+}
+
+function assertNotError(result: any) {
+  if (typeof result === 'string' && result.includes('MongoNetworkError')) {
+    expect.fail(result);
+  }
 }
 
 /**
@@ -295,6 +284,10 @@ describe('Connection string', function () {
   before(async function () {
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
+  });
+
+  beforeEach(async function () {
+    await browser.removeAllConnections();
   });
 
   after(function () {
@@ -310,7 +303,7 @@ describe('Connection string', function () {
     await browser.connectWithConnectionString();
     if (!TEST_COMPASS_WEB) {
       const result = await browser.shellEval(
-        DEFAULT_CONNECTION_NAME,
+        DEFAULT_CONNECTION_NAME_1,
         'db.runCommand({ connectionStatus: 1 })',
         true
       );
@@ -320,28 +313,30 @@ describe('Connection string', function () {
   });
 
   it('fails for authentication errors', async function () {
-    skipForWeb(this, 'connect happens on the outside');
+    const [protocol, url] = DEFAULT_CONNECTION_STRING_1.split('://');
+    // connect
+    await browser.connectWithConnectionString(`${protocol}://a:b@${url}`, {
+      connectionStatus: 'failure',
+    });
 
-    await browser.connectWithConnectionString(
-      `mongodb://a:b@127.0.0.1:${MONGODB_TEST_SERVER_PORT}/test`,
-      'failure'
+    // check the error
+    const toastTitle = await browser.$(Selectors.LGToastTitle).getText();
+    expect(toastTitle).to.equal('Authentication failed.');
+
+    const errorMessage = await browser
+      .$(Selectors.ConnectionToastErrorText)
+      .getText();
+    expect(errorMessage).to.equal(
+      'There was a problem connecting to 127.0.0.1:27091'
     );
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      const toastTitle = await browser.$(Selectors.LGToastTitle).getText();
-      expect(toastTitle).to.equal('Authentication failed.');
 
-      const errorMessage = await browser
-        .$(Selectors.ConnectionToastErrorText)
-        .getText();
-      expect(errorMessage).to.equal(
-        'There was a problem connecting to 127.0.0.1:27091'
-      );
-    } else {
-      const errorMessage = await browser
-        .$(Selectors.ConnectionFormErrorMessage)
-        .getText();
-      expect(errorMessage).to.equal('Authentication failed.');
-    }
+    // click the review button in the toast
+    await browser.clickVisible(Selectors.ConnectionToastErrorReviewButton);
+    await browser.$(Selectors.ConnectionModal).waitForDisplayed();
+    const errorText = await browser
+      .$(Selectors.ConnectionFormErrorMessage)
+      .getText();
+    expect(errorText).to.equal('Authentication failed.');
   });
 
   it('can connect to an Atlas replicaset without srv', async function () {
@@ -388,7 +383,6 @@ describe('Connection string', function () {
     await browser.connectWithConnectionString(connectionString);
 
     if (!TEST_COMPASS_WEB) {
-      await browser.screenshot('direct-connection-shell.png');
       const result = await browser.shellEval(
         connectionNameFromString(connectionString),
         'db.runCommand({ connectionStatus: 1 })',
@@ -652,10 +646,17 @@ describe('Connection form', function () {
   let browser: CompassBrowser;
 
   before(async function () {
-    skipForWeb(this, 'connect form not available in compass-web');
+    skipForWeb(
+      this,
+      'connection form is not used meaningfully outside of the local dev sandbox environment'
+    );
 
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
+  });
+
+  beforeEach(async function () {
+    await browser.removeAllConnections();
   });
 
   after(function () {
@@ -701,7 +702,6 @@ describe('Connection form', function () {
       ...atlasConnectionOptions,
       connectionName,
     });
-    await browser.screenshot('SCDAM-SHA1-shell.png');
     const result = await browser.shellEval(
       connectionName,
       'db.runCommand({ connectionStatus: 1 })',
@@ -722,7 +722,11 @@ describe('Connection form', function () {
     try {
       tempdir = await fs.mkdtemp(path.join(os.tmpdir(), 'connect-tests-'));
       const certPath = path.join(tempdir, 'x509.pem');
-      await fs.writeFile(certPath, process.env.E2E_TESTS_ATLAS_X509_PEM ?? '');
+      await fs.writeFile(
+        certPath,
+        process.env.E2E_TESTS_ATLAS_X509_PEM_BASE64 ?? '',
+        'base64'
+      );
 
       const atlasConnectionOptions: ConnectFormState = {
         hosts: [process.env.E2E_TESTS_ATLAS_HOST ?? ''],
@@ -768,7 +772,6 @@ describe('Connection form', function () {
       ...atlasConnectionOptions,
       connectionName,
     });
-    await browser.screenshot('without-session-token-shell.png');
     const result = await browser.shellEval(
       connectionName,
       'db.runCommand({ connectionStatus: 1 })',
@@ -805,46 +808,11 @@ describe('Connection form', function () {
       ...atlasConnectionOptions,
       connectionName,
     });
-    await browser.screenshot('including-session-token-shell.png');
     const result = await browser.shellEval(
       connectionName,
       'db.runCommand({ connectionStatus: 1 })',
       true
     );
-    assertNotError(result);
-    expect(result).to.have.property('ok', 1);
-  });
-
-  it('can connect to an Atlas with tlsUseSystemCA', async function () {
-    if (!hasAtlasEnvironmentVariables()) {
-      return this.skip();
-    }
-
-    const username = process.env.E2E_TESTS_ATLAS_USERNAME ?? '';
-    const password = process.env.E2E_TESTS_ATLAS_PASSWORD ?? '';
-    const host = process.env.E2E_TESTS_ATLAS_HOST ?? '';
-    const connectionName = this.test?.fullTitle() ?? '';
-
-    await browser.connectWithConnectionForm({
-      scheme: 'MONGODB_SRV',
-      authMethod: 'DEFAULT',
-      defaultUsername: username,
-      defaultPassword: password,
-      hosts: [host],
-      sslConnection: 'ON',
-      useSystemCA: true,
-      connectionName,
-    });
-
-    await browser.screenshot('tlsUseSystemCA-shell.png');
-
-    // NB: The fact that we can use the shell is a regression test for COMPASS-5802.
-    const result = await browser.shellEval(
-      connectionName,
-      'db.runCommand({ connectionStatus: 1 })',
-      true
-    );
-    await new Promise((resolve) => setTimeout(resolve, 10000));
     assertNotError(result);
     expect(result).to.have.property('ok', 1);
   });
@@ -941,6 +909,109 @@ describe('Connection form', function () {
     assertNotError(result);
     expect(result).to.have.property('ok', 1);
   });
+
+  it('fails for multiple authentication errors', async function () {
+    const connection1Name = 'error-1';
+    const connection2Name = 'error-2';
+
+    const connections: {
+      state: ConnectFormState;
+      connectionId?: string;
+      connectionError: string;
+      toastErrorText: string;
+    }[] = [
+      {
+        state: {
+          hosts: ['127.0.0.1:27091'],
+          defaultUsername: 'a',
+          defaultPassword: 'b',
+          connectionName: connection1Name,
+        },
+        connectionError: 'Authentication failed.',
+        toastErrorText: `There was a problem connecting to ${connection1Name}`,
+      },
+      {
+        state: {
+          hosts: ['127.0.0.1:16666'],
+          connectionName: connection2Name,
+        },
+        connectionError: 'connect ECONNREFUSED 127.0.0.1:16666',
+        toastErrorText: `There was a problem connecting to ${connection2Name}`,
+      },
+    ];
+
+    // connect to two connections that will both fail
+    // This actually connects back to back rather than truly simultaneously, but
+    // we can only really check that both toasts display and work anyway.
+    for (const connection of connections) {
+      await browser.connectWithConnectionForm(connection.state, {
+        connectionStatus: 'failure',
+      });
+    }
+
+    // pull the connection ids out of the sidebar
+    for (const connection of connections) {
+      if (!connection.state.connectionName) {
+        throw new Error('expected connectionName');
+      }
+      connection.connectionId = await browser.getConnectionIdByName(
+        connection.state.connectionName
+      );
+    }
+
+    // the last connection to be connected's toast appears on top, so we have to
+    // deal with the toasts in reverse
+    const expectedConnections = connections.slice().reverse();
+
+    for (const expected of expectedConnections) {
+      if (!expected.connectionId) {
+        throw new Error('expected connectionId');
+      }
+
+      // the toast should appear
+      const toastSelector = Selectors.connectionToastById(
+        expected.connectionId
+      );
+      await browser.$(toastSelector).waitForDisplayed();
+
+      // check the toast title
+      const toastTitle = await browser
+        .$(`${toastSelector} ${Selectors.LGToastTitle}`)
+        .getText();
+      expect(toastTitle).to.equal(expected.connectionError);
+
+      // check the toast body text
+      const errorMessage = await browser
+        .$(`${toastSelector} ${Selectors.ConnectionToastErrorText}`)
+        .getText();
+      expect(errorMessage).to.equal(expected.toastErrorText);
+
+      // click the review button in the toast
+      await browser.clickVisible(
+        `${toastSelector} ${Selectors.ConnectionToastErrorReviewButton}`
+      );
+
+      // the toast should go away because the action was clicked
+      await browser.$(toastSelector).waitForDisplayed({ reverse: true });
+
+      // make sure the connection form is populated with this connection
+      await browser.$(Selectors.ConnectionModal).waitForDisplayed();
+      const errorText = await browser
+        .$(Selectors.ConnectionFormErrorMessage)
+        .getText();
+      expect(errorText).to.equal(expected.connectionError);
+
+      const state = await browser.getConnectFormState();
+      expect(state.hosts).to.deep.equal(expected.state.hosts);
+      expect(state.connectionName).to.equal(expected.state.connectionName);
+
+      // close the modal
+      await browser.clickVisible(Selectors.ConnectionModalCloseButton);
+      await browser
+        .$(Selectors.ConnectionModal)
+        .waitForDisplayed({ reverse: true });
+    }
+  });
 });
 
 // eslint-disable-next-line mocha/max-top-level-suites
@@ -953,20 +1024,17 @@ describe('SRV connectivity', function () {
   });
 
   it('resolves SRV connection string using OS DNS APIs', async function () {
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // TODO(COMPAS-8009): we have to add support in custom commands for when connections fail
-      this.skip();
-    }
-
     const compass = await init(this.test?.fullTitle());
     const browser = compass.browser;
+
+    await browser.removeAllConnections();
 
     try {
       // Does not actually succeed at connecting, but that’s fine for us here
       // (Unless you have a server listening on port 27017)
       await browser.connectWithConnectionString(
         'mongodb+srv://test1.test.build.10gen.cc/test?tls=false',
-        'either'
+        { connectionStatus: 'either' }
       );
     } finally {
       // make sure the browser gets closed otherwise if this fails the process wont exit
@@ -1001,6 +1069,7 @@ describe('SRV connectivity', function () {
     const srvResolution = resolutionDetails.find((q: any) => q.query === 'SRV');
     const txtResolution = resolutionDetails.find((q: any) => q.query === 'TXT');
     expect(srvResolution).to.deep.equal({
+      durationMs: +srvResolution.durationMs,
       query: 'SRV',
       hostname: '_mongodb._tcp.test1.test.build.10gen.cc',
       error: null,
@@ -1008,6 +1077,7 @@ describe('SRV connectivity', function () {
     });
     txtResolution.error = !!txtResolution.error; // Do not assert exact error message
     expect(txtResolution).to.deep.equal({
+      durationMs: +txtResolution.durationMs,
       query: 'TXT',
       hostname: 'test1.test.build.10gen.cc',
       error: true,
@@ -1026,13 +1096,14 @@ describe('System CA access', function () {
     const compass = await init(this.test?.fullTitle());
     const browser = compass.browser;
 
+    await browser.removeAllConnections();
+
     const connectionName = this.test?.fullTitle() ?? '';
 
     try {
       await browser.connectWithConnectionForm({
         hosts: ['127.0.0.1:27091'],
         sslConnection: 'DEFAULT',
-        useSystemCA: true,
         connectionName,
       });
       const result = await browser.shellEval(
@@ -1069,6 +1140,7 @@ describe('System CA access', function () {
       } else {
         expect(systemCALogs[i].attr.asyncFallbackError).to.equal(null);
       }
+      expect(systemCALogs[i].attr.systemCertsError).to.equal(null);
     }
   });
 });
@@ -1082,6 +1154,10 @@ describe('FLE2', function () {
 
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
+  });
+
+  beforeEach(async function () {
+    await browser.removeAllConnections();
   });
 
   afterEach(async function () {
@@ -1106,7 +1182,13 @@ describe('FLE2', function () {
     await browser.connectWithConnectionForm({
       hosts: ['127.0.0.1:27091'],
       fleKeyVaultNamespace: 'alena.keyvault',
-      fleKey: 'A'.repeat(128),
+      kmsProviders: {
+        local: [
+          {
+            key: 'A'.repeat(128),
+          },
+        ],
+      },
       fleEncryptedFieldsMap: `{
         'alena.coll': {
           fields: [
@@ -1128,9 +1210,3 @@ describe('FLE2', function () {
     expect(result).to.be.equal('test');
   });
 });
-
-function assertNotError(result: any) {
-  if (typeof result === 'string' && result.includes('MongoNetworkError')) {
-    expect.fail(result);
-  }
-}

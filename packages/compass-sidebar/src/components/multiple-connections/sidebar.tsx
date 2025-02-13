@@ -2,10 +2,9 @@ import React, { useCallback, useState } from 'react';
 import { type MapStateToProps, connect } from 'react-redux';
 import {
   ConnectionStatus,
-  useConnections,
+  useConnectionActions,
   useConnectionsWithStatus,
 } from '@mongodb-js/compass-connections/provider';
-import { useConnectionFormPreferences } from '@mongodb-js/compass-connections';
 import { type ConnectionInfo } from '@mongodb-js/connection-info';
 import {
   ResizableSidebar,
@@ -15,7 +14,6 @@ import {
   HorizontalRule,
 } from '@mongodb-js/compass-components';
 import { SidebarHeader } from './header/sidebar-header';
-import { ConnectionFormModal } from '@mongodb-js/connection-form';
 import { type RootState, type SidebarThunkAction } from '../../modules';
 import { Navigation } from './navigation/navigation';
 import ConnectionInfoModal from '../connection-info-modal';
@@ -25,7 +23,9 @@ import ConnectionsNavigation from './connections-navigation';
 import CSFLEConnectionModal, {
   type CSFLEConnectionModalProps,
 } from '../csfle-connection-modal';
+import type { ConnectionsFilter } from '../use-filtered-connections';
 import { setConnectionIsCSFLEEnabled } from '../../modules/data-service';
+
 const TOAST_TIMEOUT_MS = 5000; // 5 seconds.
 
 type MappedCsfleModalProps = {
@@ -50,6 +50,10 @@ type MultipleConnectionSidebarProps = {
   activeWorkspace: WorkspaceTab | null;
   onConnectionCsfleModeChanged(connectionId: string, isEnabled: boolean): void;
   onSidebarAction(action: string, ...rest: any[]): void;
+  onOpenConnectViaModal?: (
+    atlasMetadata: ConnectionInfo['atlasMetadata']
+  ) => void;
+  isCompassWeb?: boolean;
 };
 
 const sidebarStyles = css({
@@ -88,16 +92,18 @@ export function MultipleConnectionSidebar({
   activeWorkspace,
   onSidebarAction,
   onConnectionCsfleModeChanged,
+  onOpenConnectViaModal,
+  isCompassWeb,
 }: MultipleConnectionSidebarProps) {
   const [csfleModalConnectionId, setCsfleModalConnectionId] = useState<
     string | undefined
   >(undefined);
-  const [activeConnectionsFilterRegex, setActiveConnectionsFilterRegex] =
-    useState<RegExp | null>(null);
+  const [connectionsFilter, setConnectionsFilter] = useState<ConnectionsFilter>(
+    { regex: null, excludeInactive: false }
+  );
   const [connectionInfoModalConnectionId, setConnectionInfoModalConnectionId] =
     useState<string | undefined>();
 
-  const formPreferences = useConnectionFormPreferences();
   const maybeProtectConnectionString = useMaybeProtectConnectionString();
   const connectionsWithStatus = useConnectionsWithStatus();
   const {
@@ -105,18 +111,11 @@ export function MultipleConnectionSidebar({
     disconnect,
     createNewConnection,
     editConnection,
-    cancelEditConnection,
     removeConnection,
     duplicateConnection,
-    saveEditedConnection,
-    toggleConnectionFavoritedStatus,
+    toggleFavoritedConnectionStatus,
     showNonGenuineMongoDBWarningModal,
-    state: {
-      editingConnectionInfo,
-      isEditingConnectionInfoModalOpen,
-      connectionErrors,
-    },
-  } = useConnections();
+  } = useConnectionActions();
 
   const findActiveConnection = (id: string) => {
     return connectionsWithStatus.find(
@@ -128,12 +127,6 @@ export function MultipleConnectionSidebar({
       }
     )?.connectionInfo;
   };
-
-  const onActiveConnectionFilterChange = useCallback(
-    (filterRegex: RegExp | null) =>
-      setActiveConnectionsFilterRegex(filterRegex),
-    [setActiveConnectionsFilterRegex]
-  );
 
   const onOpenConnectionInfo = useCallback((connectionId: string) => {
     return setConnectionInfoModalConnectionId(connectionId);
@@ -174,14 +167,19 @@ export function MultipleConnectionSidebar({
   return (
     <ResizableSidebar data-testid="navigation-sidebar" useNewTheme={true}>
       <aside className={sidebarStyles}>
-        <SidebarHeader onAction={onSidebarAction} />
-        <Navigation currentLocation={activeWorkspace?.type ?? null} />
-        <HorizontalRule />
+        <>
+          <SidebarHeader
+            onAction={onSidebarAction}
+            isCompassWeb={isCompassWeb}
+          />
+          <Navigation currentLocation={activeWorkspace?.type ?? null} />
+          <HorizontalRule />
+        </>
         <ConnectionsNavigation
           connectionsWithStatus={connectionsWithStatus}
           activeWorkspace={activeWorkspace}
-          filterRegex={activeConnectionsFilterRegex}
-          onFilterChange={onActiveConnectionFilterChange}
+          filter={connectionsFilter}
+          onFilterChange={setConnectionsFilter}
           onConnect={(connectionInfo) => {
             void connect(connectionInfo);
           }}
@@ -197,7 +195,7 @@ export function MultipleConnectionSidebar({
           }}
           onCopyConnectionString={onCopyConnectionString}
           onToggleFavoriteConnectionInfo={(connectionInfo) => {
-            void toggleConnectionFavoritedStatus(connectionInfo.id);
+            void toggleFavoritedConnectionStatus(connectionInfo.id);
           }}
           onOpenConnectionInfo={onOpenConnectionInfo}
           onDisconnect={(id) => {
@@ -207,32 +205,8 @@ export function MultipleConnectionSidebar({
           onOpenNonGenuineMongoDBModal={(connectionId: string) => {
             showNonGenuineMongoDBWarningModal(connectionId);
           }}
+          onOpenConnectViaModal={onOpenConnectViaModal}
         />
-        {editingConnectionInfo && (
-          <ConnectionFormModal
-            isOpen={isEditingConnectionInfoModalOpen}
-            setOpen={(newOpen) => {
-              // This is how leafygreen propagates `X` button click
-              if (newOpen === false) {
-                cancelEditConnection(editingConnectionInfo.id);
-              }
-            }}
-            initialConnectionInfo={editingConnectionInfo}
-            onSaveAndConnectClicked={(connectionInfo) => {
-              void connect(connectionInfo);
-            }}
-            onSaveClicked={(connectionInfo) => {
-              return saveEditedConnection(connectionInfo);
-            }}
-            onCancel={() => {
-              cancelEditConnection(editingConnectionInfo.id);
-            }}
-            connectionErrorMessage={
-              connectionErrors[editingConnectionInfo.id]?.message
-            }
-            preferences={formPreferences}
-          />
-        )}
         <MappedCsfleModal
           connectionId={csfleModalConnectionId}
           onClose={onCloseCsfleModal}

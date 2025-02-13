@@ -1,10 +1,6 @@
 import { expect } from 'chai';
 import type { Compass } from '../helpers/compass';
-import {
-  TEST_MULTIPLE_CONNECTIONS,
-  screenshotIfFailed,
-  skipForWeb,
-} from '../helpers/compass';
+import { screenshotIfFailed, skipForWeb } from '../helpers/compass';
 import {
   init,
   cleanup,
@@ -43,6 +39,7 @@ describe('Connection Import / Export', function () {
   let tmpdir: string;
   let i = 0;
   let telemetry: Telemetry;
+  let isFirstRun = false;
 
   const getTrackedEvents = (): any[] =>
     telemetry.events().filter((e: any) => e.type === 'track');
@@ -116,22 +113,13 @@ describe('Connection Import / Export', function () {
         : connectionString;
     expect(cs).to.equal(expected);
 
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // close the modal again so connectWithConnectionString sees the expected state
-      await browser.clickVisible(Selectors.ConnectionModalCloseButton);
+    // close the modal again so connectWithConnectionString sees the expected state
+    await browser.clickVisible(Selectors.ConnectionModalCloseButton);
 
-      await browser.selectConnectionMenuItem(
-        favoriteName,
-        Selectors.Multiple.RemoveConnectionItem
-      );
-    } else {
-      await browser.selectConnection(favoriteName);
-
-      await browser.selectConnectionMenuItem(
-        favoriteName,
-        Selectors.Single.RemoveConnectionItem
-      );
-    }
+    await browser.selectConnectionMenuItem(
+      favoriteName,
+      Selectors.RemoveConnectionItem
+    );
 
     await waitForConnections();
   }
@@ -150,18 +138,17 @@ describe('Connection Import / Export', function () {
       {
         // Open compass, create and save favorite
         const compass = await init(
-          subtestTitle(this.test, 'Favoriting connection')
+          subtestTitle(this.test, 'Favoriting connection'),
+          { firstRun: isFirstRun }
         );
+
+        isFirstRun = false;
 
         try {
           const { browser } = compass;
 
-          if (TEST_MULTIPLE_CONNECTIONS) {
-            // open the connection modal so we can fill in the connection string
-            await browser.clickVisible(
-              Selectors.Multiple.SidebarNewConnectionButton
-            );
-          }
+          // open the connection modal so we can fill in the connection string
+          await browser.clickVisible(Selectors.SidebarNewConnectionButton);
 
           await browser.setValueVisible(
             Selectors.ConnectionFormStringInput,
@@ -169,10 +156,7 @@ describe('Connection Import / Export', function () {
           );
 
           await waitForConnections();
-          await browser.saveFavorite(
-            favoriteName,
-            TEST_MULTIPLE_CONNECTIONS ? 'Orange' : 'color3'
-          );
+          await browser.saveFavorite(favoriteName, 'Orange');
           await waitForConnections();
         } finally {
           await cleanup(compass);
@@ -204,23 +188,15 @@ describe('Connection Import / Export', function () {
       {
         // Open compass, delete favorite
         const compass = await init(
-          subtestTitle(this.test, 'Removing connection')
+          subtestTitle(this.test, 'Removing connection'),
+          { firstRun: false }
         );
         try {
           const { browser } = compass;
-          if (TEST_MULTIPLE_CONNECTIONS) {
-            await browser.selectConnectionMenuItem(
-              favoriteName,
-              Selectors.Multiple.RemoveConnectionItem
-            );
-          } else {
-            await browser.selectConnection(favoriteName);
-
-            await browser.selectConnectionMenuItem(
-              favoriteName,
-              Selectors.Single.RemoveConnectionItem
-            );
-          }
+          await browser.selectConnectionMenuItem(
+            favoriteName,
+            Selectors.RemoveConnectionItem
+          );
           await waitForConnections();
         } finally {
           await cleanup(compass);
@@ -249,7 +225,8 @@ describe('Connection Import / Export', function () {
       {
         // Open compass, verify favorite exists
         const compass = await init(
-          subtestTitle(this.test, 'Verifying imported connection')
+          subtestTitle(this.test, 'Verifying imported connection'),
+          { firstRun: false }
         );
         try {
           const { browser } = compass;
@@ -268,15 +245,11 @@ describe('Connection Import / Export', function () {
 
     before(async function () {
       // Open compass, create and save favorite
-      compass = await init(this.test?.fullTitle());
+      compass = await init(this.test?.fullTitle(), { firstRun: false });
       browser = compass.browser;
 
-      if (TEST_MULTIPLE_CONNECTIONS) {
-        // open the connection modal so we can fill in the connection string
-        await browser.clickVisible(
-          Selectors.Multiple.SidebarNewConnectionButton
-        );
-      }
+      // open the connection modal so we can fill in the connection string
+      await browser.clickVisible(Selectors.SidebarNewConnectionButton);
 
       await browser.setValueVisible(
         Selectors.ConnectionFormStringInput,
@@ -285,10 +258,7 @@ describe('Connection Import / Export', function () {
 
       await waitForConnections();
 
-      await browser.saveFavorite(
-        favoriteName,
-        TEST_MULTIPLE_CONNECTIONS ? 'Orange' : 'color3'
-      );
+      await browser.saveFavorite(favoriteName, 'Orange');
 
       // again: make sure the new favourite is there
       await waitForConnections();
@@ -304,10 +274,6 @@ describe('Connection Import / Export', function () {
 
     for (const variant of variants) {
       it(`supports exporting and importing connections in ${variant} mode`, async function () {
-        const Sidebar = TEST_MULTIPLE_CONNECTIONS
-          ? Selectors.Multiple
-          : Selectors.Single;
-
         {
           // Make sure file exists so that the file picker works. We could also do work
           // similar to what we do for collection data export, where we add special listeners
@@ -320,7 +286,7 @@ describe('Connection Import / Export', function () {
         // Open export modal
         {
           await browser.selectConnectionsMenuItem(
-            Sidebar.ExportConnectionsModalOpen
+            Selectors.ExportConnectionsModalOpen
           );
           await browser.$(Selectors.ExportConnectionsModal).waitForDisplayed();
         }
@@ -382,7 +348,7 @@ describe('Connection Import / Export', function () {
         // Open import modal
         {
           await browser.selectConnectionsMenuItem(
-            Sidebar.ImportConnectionsModalOpen
+            Selectors.ImportConnectionsModalOpen
           );
           await browser.$(Selectors.ImportConnectionsModal).waitForDisplayed();
         }

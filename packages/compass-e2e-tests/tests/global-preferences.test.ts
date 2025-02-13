@@ -17,10 +17,10 @@ async function getCheckboxAndBannerState(
   setting: string
 ) {
   const settingSelector = `${Selectors.SettingsModal} [data-testid="setting-${setting}"]`;
-  const checkbox = await browser.$(`${settingSelector} input[type="checkbox"]`);
-  const disabled = await checkbox.getAttribute('disabled');
+  const checkbox = browser.$(`${settingSelector} input[type="checkbox"]`);
+  const disabled = await checkbox.getAttribute('aria-disabled');
   const value = await checkbox.getAttribute('aria-checked'); // .getValue() always returns 'on'?
-  const banner = await browser.$(
+  const banner = browser.$(
     `${settingSelector} [data-testid="set-cli-banner"], ${settingSelector} [data-testid="set-global-banner"], ${settingSelector} [data-testid="derived-banner"]`
   );
   const bannerText = (await banner.isExisting())
@@ -60,7 +60,7 @@ describe('Global preferences', function () {
     });
     const browser = compass.browser;
     try {
-      await browser.openSettingsModal('Privacy');
+      await browser.openSettingsModal('privacy');
       {
         const { disabled, value, bannerText } = await getCheckboxAndBannerState(
           browser,
@@ -78,11 +78,10 @@ describe('Global preferences', function () {
           'trackUsageStatistics'
         );
         expect(value).to.equal('true');
-        expect(disabled).to.equal(null);
+        expect(disabled).to.equal('false');
         expect(bannerText).to.equal(null);
       }
     } finally {
-      await browser.screenshot('global-preferences-cli.png');
       await cleanup(compass);
     }
   });
@@ -92,7 +91,7 @@ describe('Global preferences', function () {
     const compass = await init(this.test?.fullTitle());
     const browser = compass.browser;
     try {
-      await browser.openSettingsModal('Privacy');
+      await browser.openSettingsModal('privacy');
       {
         const { disabled, value, bannerText } = await getCheckboxAndBannerState(
           browser,
@@ -110,11 +109,10 @@ describe('Global preferences', function () {
           'trackUsageStatistics'
         );
         expect(value).to.equal('true');
-        expect(disabled).to.equal(null);
+        expect(disabled).to.equal('false');
         expect(bannerText).to.equal(null);
       }
     } finally {
-      await browser.screenshot('global-preferences-yaml.png');
       await cleanup(compass);
     }
   });
@@ -124,7 +122,7 @@ describe('Global preferences', function () {
     const compass = await init(this.test?.fullTitle());
     const browser = compass.browser;
     try {
-      await browser.openSettingsModal('Privacy');
+      await browser.openSettingsModal('privacy');
       {
         const { disabled, value, bannerText } = await getCheckboxAndBannerState(
           browser,
@@ -142,11 +140,10 @@ describe('Global preferences', function () {
           'trackUsageStatistics'
         );
         expect(value).to.equal('true');
-        expect(disabled).to.equal(null);
+        expect(disabled).to.equal('false');
         expect(bannerText).to.equal(null);
       }
     } finally {
-      await browser.screenshot('global-preferences-ejson.png');
       await cleanup(compass);
     }
   });
@@ -156,7 +153,7 @@ describe('Global preferences', function () {
     const compass = await init(this.test?.fullTitle());
     const browser = compass.browser;
     try {
-      await browser.openSettingsModal('Privacy');
+      await browser.openSettingsModal('privacy');
       const { disabled, value, bannerText } = await getCheckboxAndBannerState(
         browser,
         'enableMaps'
@@ -167,7 +164,6 @@ describe('Global preferences', function () {
         'This setting cannot be modified as it has been set in the global Compass configuration file.'
       );
     } finally {
-      await browser.screenshot('global-preferences-networkTraffic-false.png');
       await cleanup(compass);
     }
   });
@@ -181,7 +177,7 @@ describe('Global preferences', function () {
       // section so we can have some level of confidence that toggling the
       // setting did something and that it would be detected by our assertions
       // below.
-      await browser.openSettingsModal('Privacy');
+      await browser.openSettingsModal('privacy');
       await browser.clickVisible(Selectors.GeneralSettingsButton);
       {
         const { disabled, value, bannerText } = await getCheckboxAndBannerState(
@@ -205,15 +201,7 @@ describe('Global preferences', function () {
           'This setting cannot be modified as it has been set in the global Compass configuration file.'
         );
       }
-      // TODO(COMPASS-8071): This just passes for multiple connections because
-      // the shell section is never there.
-      {
-        const shellSection = await browser.$(Selectors.ShellSection);
-        const isShellSectionExisting = await shellSection.isExisting();
-        expect(isShellSectionExisting).to.be.equal(false);
-      }
     } finally {
-      await browser.screenshot('global-preferences-readOnly-true.png');
       await cleanup(compass);
     }
   });

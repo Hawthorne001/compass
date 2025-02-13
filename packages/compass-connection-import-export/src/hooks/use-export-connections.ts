@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   COMMON_INITIAL_STATE,
   useImportExportConnectionsCommon,
@@ -15,7 +15,7 @@ import type {
   CommonImportExportState,
 } from './common';
 import { usePreference } from 'compass-preferences-model/provider';
-import { useConnectionRepository } from '@mongodb-js/compass-connections/provider';
+import { useConnectionsList } from '@mongodb-js/compass-connections/provider';
 
 type ExportConnectionsState = CommonImportExportState<ConnectionShortInfo> & {
   removeSecrets: boolean;
@@ -55,21 +55,9 @@ export function useExportConnections({
   onChangeRemoveSecrets: (evt: React.ChangeEvent<HTMLInputElement>) => void;
   state: ExportConnectionsState;
 } {
-  const multipleConnectionsEnabled = usePreference(
-    'enableNewMultipleConnectionSystem'
-  );
-  const { favoriteConnections, nonFavoriteConnections } =
-    useConnectionRepository();
-  const connectionsToExport = useMemo(() => {
-    // in case of multiple connections all the connections are saved (that used
-    // to be favorites in the single connection world) so we need to account for
-    // all the saved connections
-    if (multipleConnectionsEnabled) {
-      return [...favoriteConnections, ...nonFavoriteConnections];
-    } else {
-      return favoriteConnections;
-    }
-  }, [multipleConnectionsEnabled, favoriteConnections, nonFavoriteConnections]);
+  const connectionsToExport = useConnectionsList((conn) => {
+    return !conn.isBeingCreated && !conn.isAutoconnectInfo;
+  });
   const connectionStorage = useConnectionStorageContext();
   const exportConnectionsImpl =
     connectionStorage.exportConnections?.bind(connectionStorage);
@@ -80,25 +68,30 @@ export function useExportConnections({
   }
 
   const [state, setState] = useState<ExportConnectionsState>(INITIAL_STATE);
-  useEffect(() => setState(INITIAL_STATE), [open]);
+  useEffect(() => {
+    setState((prevState) => {
+      return {
+        // Reset the form state to initial when modal is open, but keep the list
+        ...INITIAL_STATE,
+        connectionList: prevState.connectionList,
+      };
+    });
+  }, [open]);
   const { passphrase, filename, connectionList, removeSecrets } = state;
 
   useEffect(() => {
     // If `connectionsToExport` changes, update the list of connections
     // that are displayed in our table.
-    if (
-      connectionsToExport.map(({ id }) => id).join(',') !==
-      state.connectionList.map(({ id }) => id).join(',')
-    ) {
-      setState((prevState) => ({
-        ...prevState,
-        connectionList: connectionInfosToConnectionShortInfos(
-          connectionsToExport,
-          state.connectionList
-        ),
-      }));
-    }
-  }, [connectionsToExport, state.connectionList]);
+    setState((prevState) => ({
+      ...prevState,
+      connectionList: connectionInfosToConnectionShortInfos(
+        connectionsToExport.map((conn) => {
+          return conn.info;
+        }),
+        prevState.connectionList
+      ),
+    }));
+  }, [connectionsToExport]);
 
   const protectConnectionStrings = !!usePreference('protectConnectionStrings');
   useEffect(() => {

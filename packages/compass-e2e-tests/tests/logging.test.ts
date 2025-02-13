@@ -4,8 +4,7 @@ import {
   cleanup,
   screenshotIfFailed,
   skipForWeb,
-  TEST_MULTIPLE_CONNECTIONS,
-  DEFAULT_CONNECTION_NAME,
+  DEFAULT_CONNECTION_NAME_1,
 } from '../helpers/compass';
 import type { Compass } from '../helpers/compass';
 import { startTelemetryServer } from '../helpers/telemetry';
@@ -22,20 +21,18 @@ describe('Logging and Telemetry integration', function () {
 
     before(async function () {
       telemetry = await startTelemetryServer();
-      const compass = await init(this.test?.fullTitle(), { firstRun: true });
+      const compass = await init(this.test?.fullTitle());
       const { browser } = compass;
 
       try {
         await browser.connectWithConnectionString();
 
-        if (TEST_MULTIPLE_CONNECTIONS) {
-          // make sure we generate the screen event that the tests expect
-          await browser.navigateToMyQueries();
-        }
+        // make sure we generate the screen event that the tests expect
+        await browser.navigateToMyQueries();
 
-        await browser.shellEval(DEFAULT_CONNECTION_NAME, 'use test');
+        await browser.shellEval(DEFAULT_CONNECTION_NAME_1, 'use test');
         await browser.shellEval(
-          DEFAULT_CONNECTION_NAME,
+          DEFAULT_CONNECTION_NAME_1,
           'db.runCommand({ connectionStatus: 1 })'
         );
       } finally {
@@ -89,7 +86,6 @@ describe('Logging and Telemetry integration', function () {
           .events()
           .find((entry) => entry.event === 'Connection Attempt');
         expect(connectionAttempt.properties.is_favorite).to.equal(false);
-        expect(connectionAttempt.properties.is_recent).to.equal(false);
         expect(connectionAttempt.properties.is_new).to.equal(true);
       });
 
@@ -117,11 +113,11 @@ describe('Logging and Telemetry integration', function () {
 
         expect(connectionAttempt.properties.is_csfle).to.equal(false);
         expect(connectionAttempt.properties.has_csfle_schema).to.equal(false);
-        expect(connectionAttempt.properties.has_kms_local).to.equal(false);
-        expect(connectionAttempt.properties.has_kms_azure).to.equal(false);
-        expect(connectionAttempt.properties.has_kms_kmip).to.equal(false);
-        expect(connectionAttempt.properties.has_kms_gcp).to.equal(false);
-        expect(connectionAttempt.properties.has_kms_aws).to.equal(false);
+        expect(connectionAttempt.properties.count_kms_local).to.equal(0);
+        expect(connectionAttempt.properties.count_kms_azure).to.equal(0);
+        expect(connectionAttempt.properties.count_kms_kmip).to.equal(0);
+        expect(connectionAttempt.properties.count_kms_gcp).to.equal(0);
+        expect(connectionAttempt.properties.count_kms_aws).to.equal(0);
       });
 
       it('tracks an event for screens that were accessed', function () {
@@ -309,6 +305,16 @@ describe('Logging and Telemetry integration', function () {
           ctx: 'repl',
           msg: 'Evaluating input',
           attr: {
+            input: 'version()',
+          },
+        },
+        {
+          s: 'I',
+          c: 'MONGOSH',
+          id: 1_000_000_007,
+          ctx: 'repl',
+          msg: 'Evaluating input',
+          attr: {
             input: 'db.runCommand({ connectionStatus: 1 })',
           },
         },
@@ -411,8 +417,9 @@ describe('Logging and Telemetry integration', function () {
     before(async function () {
       telemetry = await startTelemetryServer();
       compass = await init(this.test?.fullTitle());
+      const { browser } = compass;
 
-      await compass.browser.setFeature('telemetryAtlasUserId', auid);
+      await browser.setFeature('telemetryAtlasUserId', auid);
     });
 
     afterEach(async function () {

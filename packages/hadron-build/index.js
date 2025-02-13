@@ -1,9 +1,9 @@
 'use strict';
-exports = function() {};
+exports = function () {};
 
+exports.info = require('./commands/info');
 exports.release = require('./commands/release');
 exports.upload = require('./commands/upload');
 exports.download = require('./commands/download');
-exports.verify = require('./commands/verify');
 
 module.exports = exports;

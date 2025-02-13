@@ -1,4 +1,4 @@
-import type { Reducer } from 'redux';
+import type { Action, Reducer } from 'redux';
 import { getSimplifiedSchema } from 'mongodb-schema';
 import toNS from 'mongodb-ns';
 import { UUID } from 'bson';
@@ -139,7 +139,7 @@ function trackAndLogFailed({
   track(
     'AI Response Failed',
     () => ({
-      editor_view_type: 'find',
+      editor_view_type: 'find' as const,
       error_name: errorName,
       status_code: statusCode,
       error_code: errorCode ?? '',
@@ -164,7 +164,7 @@ export const runAIQuery = (
       preferences,
       atlasAiService,
       logger: { log },
-      connectionInfoAccess,
+      connectionInfoRef,
       track,
     }
   ) => {
@@ -173,12 +173,12 @@ export const runAIQuery = (
     const abortController = new AbortController();
     const { id: requestId, signal } = getAbortSignal();
 
-    const connectionInfo = connectionInfoAccess.getCurrentConnectionInfo();
+    const connectionInfo = connectionInfoRef.current;
 
     track(
       'AI Prompt Submitted',
       () => ({
-        editor_view_type: 'find',
+        editor_view_type: 'find' as const,
         user_input_length: userInput.length,
         has_sample_documents: provideSampleDocuments,
         request_id: requestId,
@@ -221,20 +221,23 @@ export const runAIQuery = (
 
       const { collection: collectionName, database: databaseName } =
         toNS(namespace);
-      jsonResponse = await atlasAiService.getQueryFromUserInput({
-        signal: abortController.signal,
-        userInput,
-        collectionName,
-        databaseName,
-        schema,
-        // Provide sample documents when the user has opted in in their settings.
-        ...(provideSampleDocuments
-          ? {
-              sampleDocuments,
-            }
-          : undefined),
-        requestId,
-      });
+      jsonResponse = await atlasAiService.getQueryFromUserInput(
+        {
+          signal: abortController.signal,
+          userInput,
+          collectionName,
+          databaseName,
+          schema,
+          // Provide sample documents when the user has opted in in their settings.
+          ...(provideSampleDocuments
+            ? {
+                sampleDocuments,
+              }
+            : undefined),
+          requestId,
+        },
+        connectionInfo
+      );
     } catch (err: any) {
       if (signal.aborted) {
         // If we already aborted so we ignore the error.
@@ -372,7 +375,7 @@ export const runAIQuery = (
     track(
       'AI Response Generated',
       () => ({
-        editor_view_type: 'find',
+        editor_view_type: 'find' as const,
         query_shape: Object.keys(generatedFields),
         request_id: requestId,
       }),
@@ -409,10 +412,10 @@ export const cancelAIQuery = (): QueryBarThunkAction<
 };
 
 export const showInput = (): QueryBarThunkAction<Promise<void>> => {
-  return async (dispatch, _getState, { atlasAuthService }) => {
+  return async (dispatch, _getState, { atlasAiService }) => {
     try {
       if (process.env.COMPASS_E2E_SKIP_ATLAS_SIGNIN !== 'true') {
-        await atlasAuthService.signIn({ promptType: 'ai-promo-modal' });
+        await atlasAiService.ensureAiFeatureAccess();
       }
       dispatch({ type: AIQueryActionTypes.ShowInput });
     } catch {
@@ -429,7 +432,7 @@ export const hideInput = (): QueryBarThunkAction<void, HideInputAction> => {
   };
 };
 
-const aiQueryReducer: Reducer<AIQueryState> = (
+const aiQueryReducer: Reducer<AIQueryState, Action> = (
   state = initialState,
   action
 ) => {

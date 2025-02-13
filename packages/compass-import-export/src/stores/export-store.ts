@@ -11,12 +11,8 @@ import {
 } from '../modules/export';
 import type { PreferencesAccess } from 'compass-preferences-model';
 import type { Logger } from '@mongodb-js/compass-logging/provider';
-import { ConnectionsManagerEvents } from '@mongodb-js/compass-connections/provider';
 import type { ActivateHelpers } from 'hadron-app-registry';
-import type {
-  ConnectionRepositoryAccess,
-  ConnectionsManager,
-} from '@mongodb-js/compass-connections/provider';
+import type { ConnectionsService } from '@mongodb-js/compass-connections/provider';
 import type { TrackFunction } from '@mongodb-js/compass-telemetry';
 
 export function configureStore(services: ExportPluginServices) {
@@ -34,8 +30,7 @@ export type RootExportState = ReturnType<
 
 export type ExportPluginServices = {
   globalAppRegistry: AppRegistry;
-  connectionsManager: ConnectionsManager;
-  connectionRepository: ConnectionRepositoryAccess;
+  connections: ConnectionsService;
   preferences: PreferencesAccess;
   logger: Logger;
   track: TrackFunction;
@@ -64,8 +59,7 @@ export function activatePlugin(
   _: unknown,
   {
     globalAppRegistry,
-    connectionsManager,
-    connectionRepository,
+    connections,
     preferences,
     logger,
     track,
@@ -74,8 +68,7 @@ export function activatePlugin(
 ) {
   const store = configureStore({
     globalAppRegistry,
-    connectionsManager,
-    connectionRepository,
+    connections,
     preferences,
     logger,
     track,
@@ -116,13 +109,9 @@ export function activatePlugin(
       );
     }
   );
-  on(
-    connectionsManager,
-    ConnectionsManagerEvents.ConnectionDisconnected,
-    function (connectionId: string) {
-      store.dispatch(connectionDisconnected(connectionId));
-    }
-  );
+  on(connections, 'disconnected', function (connectionId: string) {
+    store.dispatch(connectionDisconnected(connectionId));
+  });
 
   addCleanup(() => {
     // We use close and not cancel because cancel doesn't actually cancel
@@ -135,3 +124,5 @@ export function activatePlugin(
     deactivate: cleanup,
   };
 }
+
+export type ExportStore = ReturnType<typeof configureStore>;

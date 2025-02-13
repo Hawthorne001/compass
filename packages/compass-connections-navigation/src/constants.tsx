@@ -4,9 +4,10 @@ export const MAX_COLLECTION_PLACEHOLDER_ITEMS = Infinity;
 export const MAX_DATABASE_PLACEHOLDER_ITEMS = Infinity;
 export const MIN_DATABASE_PLACEHOLDER_ITEMS = 5;
 export const ROW_HEIGHT = 28;
-// export const COLLETIONS_MARGIN_BOTTOM = spacing[1];
 
 export type Actions =
+  // Atlas Cloud actions
+  | 'show-connect-via-modal'
   // connection item related actions
   | 'open-shell'
   | 'select-connection'

@@ -6,11 +6,12 @@ import {
   init,
   cleanup,
   screenshotIfFailed,
-  DEFAULT_CONNECTION_NAME,
+  DEFAULT_CONNECTION_NAME_1,
 } from '../helpers/compass';
 import type { Compass } from '../helpers/compass';
 import * as Selectors from '../helpers/selectors';
 import { createNumbersCollection } from '../helpers/insert-data';
+import { context } from '../helpers/test-runner-context';
 
 describe('Bulk Delete', function () {
   let compass: Compass;
@@ -21,6 +22,7 @@ describe('Bulk Delete', function () {
     telemetry = await startTelemetryServer();
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
+    await browser.setupDefaultConnections();
   });
 
   after(async function () {
@@ -30,9 +32,10 @@ describe('Bulk Delete', function () {
 
   beforeEach(async function () {
     await createNumbersCollection();
-    await browser.connectWithConnectionString();
+    await browser.disconnectAll();
+    await browser.connectToDefaults();
     await browser.navigateToCollectionTab(
-      DEFAULT_CONNECTION_NAME,
+      DEFAULT_CONNECTION_NAME_1,
       'test',
       'numbers',
       'Documents'
@@ -155,7 +158,7 @@ describe('Bulk Delete', function () {
   });
 
   it('can export a delete query', async function () {
-    if (process.env.COMPASS_E2E_DISABLE_CLIPBOARD_USAGE === 'true') {
+    if (context.disableClipboardUsage) {
       this.skip();
     }
 

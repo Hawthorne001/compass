@@ -36,10 +36,10 @@ describe('aiQueryReducer', function () {
   }
 
   describe('runAIQuery', function () {
-    const connectionInfoAccess = {
-      getCurrentConnectionInfo: () => ({
+    const connectionInfoRef = {
+      current: {
         id: 'TEST',
-      }),
+      },
     };
 
     describe('with a successful server response', function () {
@@ -60,8 +60,7 @@ describe('aiQueryReducer', function () {
           },
           {
             dataService: mockDataService,
-            connectionInfoAccess,
-            atlasAuthService: { on: sandbox.stub() },
+            connectionInfoRef,
             atlasAiService: mockAtlasAiService,
             preferences,
             logger: createNoopLogger(),
@@ -104,9 +103,8 @@ describe('aiQueryReducer', function () {
         };
 
         const store = createStore({}, {
-          atlasAuthService: { on: sandbox.stub() },
           atlasAiService: mockAtlasAiService,
-          connectionInfoAccess,
+          connectionInfoRef,
           dataService: {
             sample() {
               return Promise.resolve([]);
@@ -132,14 +130,13 @@ describe('aiQueryReducer', function () {
           getQueryFromUserInput: sandbox.stub().rejects(authError),
         };
         const store = createStore({}, {
-          atlasAuthService: { on: sandbox.stub() },
           atlasAiService: mockAtlasAiService,
           dataService: {
             sample() {
               return Promise.resolve([]);
             },
           },
-          connectionInfoAccess,
+          connectionInfoRef,
           preferences,
           logger: createNoopLogger(),
           track: createNoopTrack(),
@@ -181,8 +178,7 @@ describe('aiQueryReducer', function () {
           },
           {
             dataService: mockDataService,
-            connectionInfoAccess,
-            atlasAuthService: { on: sandbox.stub() },
+            connectionInfoRef,
             atlasAiService: mockAtlasAiService,
             preferences,
             logger: createNoopLogger(),
@@ -222,8 +218,7 @@ describe('aiQueryReducer', function () {
           },
           {
             dataService: mockDataService,
-            connectionInfoAccess,
-            atlasAuthService: { on: sandbox.stub() },
+            connectionInfoRef,
             atlasAiService: mockAtlasAiService,
             preferences,
             logger: createNoopLogger(),

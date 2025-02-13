@@ -6,7 +6,7 @@ import { AppRegistry } from 'hadron-app-registry';
 import type { PreferencesAccess } from 'compass-preferences-model';
 import { createSandboxFromDefaultPreferences } from 'compass-preferences-model';
 import { expect } from 'chai';
-import { waitFor } from '@testing-library/react';
+import { waitFor } from '@mongodb-js/testing-library-compass';
 describe('createQueryWithHistoryAutocompleter', function () {
   let preferences: PreferencesAccess;
   let loadAllStub: sinon.SinonStub;
@@ -55,7 +55,6 @@ describe('createQueryWithHistoryAutocompleter', function () {
             loadAll: loadAllStub,
           }),
         },
-        atlasAuthService: { on: sinon.stub() },
         atlasAiService: mockService,
         preferences,
         logger: createNoopLogger(),

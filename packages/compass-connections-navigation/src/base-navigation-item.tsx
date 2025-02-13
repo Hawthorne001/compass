@@ -6,7 +6,7 @@ import {
   ItemActionControls,
   cx,
 } from '@mongodb-js/compass-components';
-import { ROW_HEIGHT, type Actions } from './constants';
+import { type Actions, ROW_HEIGHT } from './constants';
 import { ExpandButton } from './tree-item';
 import { type NavigationItemActions } from './item-actions';
 
@@ -17,6 +17,7 @@ type NavigationBaseItemProps = {
   isExpandDisabled: boolean;
   isExpanded: boolean;
   isFocused: boolean;
+  hasDefaultAction: boolean;
   icon: React.ReactNode;
   style: React.CSSProperties;
 
@@ -27,7 +28,7 @@ type NavigationBaseItemProps = {
     actions: NavigationItemActions;
     onAction: (action: Actions) => void;
   };
-  onExpand: (toggle: boolean) => void;
+  toggleExpand: () => void;
 };
 
 const menuStyles = css({
@@ -37,9 +38,6 @@ const menuStyles = css({
 });
 
 const itemContainerStyles = css({
-  paddingLeft: spacing[300],
-  paddingRight: spacing[300],
-  cursor: 'pointer',
   color: 'var(--item-color)',
   backgroundColor: 'var(--item-bg-color)',
   '&[data-is-active="true"] .item-wrapper': {
@@ -55,14 +53,16 @@ const itemContainerStyles = css({
   },
 });
 
+const itemContainerWithActionStyles = css({
+  cursor: 'pointer',
+});
+
 const itemWrapperStyles = css({
   display: 'flex',
   height: ROW_HEIGHT,
   alignItems: 'center',
-  paddingLeft: spacing[100],
-  paddingRight: spacing[100],
+  paddingRight: spacing[400],
   gap: spacing[50],
-  borderRadius: spacing[100],
 });
 
 const labelAndIconWrapperStyles = css({
@@ -97,26 +97,30 @@ export const NavigationBaseItem: React.FC<NavigationBaseItemProps> = ({
   isExpandDisabled,
   isExpanded,
   isFocused,
-  onExpand,
+  hasDefaultAction,
+  toggleExpand,
   children,
 }) => {
   const [hoverProps, isHovered] = useHoverState();
   return (
     <div
       data-testid="base-navigation-item"
-      className={itemContainerStyles}
+      className={cx(itemContainerStyles, {
+        [itemContainerWithActionStyles]: hasDefaultAction,
+      })}
       {...hoverProps}
       {...dataAttributes}
     >
       <div className={cx('item-wrapper', itemWrapperStyles)} style={style}>
         {isExpandVisible && (
           <ExpandButton
-            onClick={(evt) => {
-              if (isExpandDisabled) return;
-              evt.stopPropagation();
-              onExpand(!isExpanded);
+            onClick={(event) => {
+              // Prevent the click from propagating to the `TreeItem`, triggering the default action
+              event.stopPropagation();
+              toggleExpand();
             }}
             isExpanded={isExpanded}
+            disabled={isExpandDisabled}
           ></ExpandButton>
         )}
         <div className={labelAndIconWrapperStyles}>
@@ -124,13 +128,13 @@ export const NavigationBaseItem: React.FC<NavigationBaseItemProps> = ({
           <span title={name}>{name}</span>
         </div>
         <div className={actionControlsWrapperStyles}>
-          <ItemActionControls<Actions>
+          <ItemActionControls
             menuClassName={menuStyles}
             isVisible={isActive || isHovered || isFocused}
             data-testid="sidebar-navigation-item-actions"
             iconSize="xsmall"
             {...actionProps}
-          ></ItemActionControls>
+          />
           {children}
         </div>
       </div>

@@ -13,6 +13,8 @@ const allowedConnectionStringOptions = [
   'authMechanism',
   'authMechanismProperties', // Partially. See allowed and disallowed AuthMechanismProperties below.
   'authSource',
+  'autoSelectFamily',
+  'autoSelectFamilyAttemptTimeout',
   'bsonRegExp',
   'cert',
   'checkKeys',
@@ -62,6 +64,7 @@ const allowedConnectionStringOptions = [
   'srvMaxHosts',
   'srvServiceName',
   'ssl', // Only if value is `true` or target host is local.
+  'timeoutMS',
   'tls', // Only if value is `true` or target host is local.
   'tlsCertificateKeyFile',
   'tlsCertificateKeyFilePassword',
@@ -75,6 +78,7 @@ const allowedConnectionStringOptions = [
 ] as const;
 
 const disallowedConnectionStringOptions = [
+  'allowPartialTrustChain',
   'ALPNProtocols',
   'auth',
   'autoEncryption',

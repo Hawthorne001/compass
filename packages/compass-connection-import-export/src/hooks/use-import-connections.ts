@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   type ConnectionStorage,
   useConnectionStorageContext,
@@ -13,8 +13,10 @@ import type {
   ConnectionShortInfo,
   CommonImportExportState,
 } from './common';
-import { useConnectionRepository } from '@mongodb-js/compass-connections/provider';
-import { usePreference } from 'compass-preferences-model/provider';
+import {
+  useConnectionActions,
+  useConnectionsList,
+} from '@mongodb-js/compass-connections/provider';
 
 type ConnectionImportInfo = ConnectionShortInfo & {
   isExistingConnection: boolean;
@@ -100,37 +102,32 @@ export function useImportConnections({
   onChangeConnectionList: (connectionInfos: ConnectionShortInfo[]) => void;
   state: ImportConnectionsState;
 } {
-  const multipleConnectionsEnabled = usePreference(
-    'enableNewMultipleConnectionSystem'
-  );
-  const { favoriteConnections, nonFavoriteConnections } =
-    useConnectionRepository();
-  const existingConnections = useMemo(() => {
-    // in case of multiple connections all the connections are saved (that used
-    // to be favorites in the single connection world) so we need to account for
-    // all the saved connections
-    if (multipleConnectionsEnabled) {
-      return [...favoriteConnections, ...nonFavoriteConnections];
-    } else {
-      return favoriteConnections;
-    }
-  }, [multipleConnectionsEnabled, favoriteConnections, nonFavoriteConnections]);
+  const existingConnections = useConnectionsList((conn) => {
+    return !conn.isBeingCreated && !conn.isAutoconnectInfo;
+  });
+  const { importConnections } = useConnectionActions();
   const connectionStorage = useConnectionStorageContext();
-  const importConnectionsImpl =
-    connectionStorage.importConnections?.bind(connectionStorage);
   const deserializeConnectionsImpl =
     connectionStorage.deserializeConnections?.bind(connectionStorage);
-  if (!importConnectionsImpl || !deserializeConnectionsImpl) {
+  if (!deserializeConnectionsImpl) {
     throw new Error(
       'Import Connections feature requires the provided ConnectionStorage to implement importConnections and deserializeConnections'
     );
   }
 
   const [state, setState] = useState<ImportConnectionsState>(INITIAL_STATE);
-  useEffect(() => setState(INITIAL_STATE), [open]);
+  useEffect(() => {
+    // Reset the form state to initial when modal is open, but keep the list
+    setState((prevState) => {
+      return {
+        ...INITIAL_STATE,
+        connectionList: prevState.connectionList,
+      };
+    });
+  }, [open]);
   const { passphrase, filename, fileContents, connectionList } = state;
 
-  const existingConnectionIds = existingConnections.map(({ id }) => id);
+  const existingConnectionIds = existingConnections.map(({ info }) => info.id);
   useEffect(() => {
     // If `existingConnections` changes, update the list of connections that are
     // displayed in our table.
@@ -153,7 +150,7 @@ export function useImportConnections({
         .filter((x) => x.selected)
         .map((x) => x.id);
       try {
-        await importConnectionsImpl({
+        await importConnections({
           content: fileContents,
           options: {
             passphrase,

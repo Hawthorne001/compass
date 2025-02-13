@@ -1,8 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { isLocalhost } from 'mongodb-build-info';
 import {
-  Icon,
-  ServerIcon,
   cx,
   css,
   palette,
@@ -17,8 +14,8 @@ import type { NavigationItemActions } from './item-actions';
 import type { SidebarTreeItem, SidebarActionableItem } from './tree-data';
 import { getTreeItemStyles } from './utils';
 import { ConnectionStatus } from '@mongodb-js/compass-connections/provider';
-import { WithStatusMarker } from './with-status-marker';
 import type { Actions } from './constants';
+import { NavigationItemIcon } from './navigation-item-icon';
 
 const nonGenuineBtnStyles = css({
   color: palette.yellow.dark2,
@@ -115,43 +112,6 @@ export function NavigationItem({
   getItemActions,
 }: NavigationItemProps) {
   const isDarkMode = useDarkMode();
-  const itemIcon = useMemo(() => {
-    if (item.type === 'database') {
-      return <Icon glyph="Database" />;
-    }
-    if (item.type === 'collection') {
-      return <Icon glyph="Folder" />;
-    }
-    if (item.type === 'view') {
-      return <Icon glyph="Visibility" />;
-    }
-    if (item.type === 'timeseries') {
-      return <Icon glyph="TimeSeries" />;
-    }
-    if (item.type === 'connection') {
-      const isFavorite = item.connectionInfo.savedConnectionType === 'favorite';
-      if (isFavorite) {
-        return (
-          <WithStatusMarker status={item.connectionStatus}>
-            <Icon glyph="Favorite" />
-          </WithStatusMarker>
-        );
-      }
-      if (isLocalhost(item.connectionInfo.connectionOptions.connectionString)) {
-        return (
-          <WithStatusMarker status={item.connectionStatus}>
-            <Icon glyph="Laptop" />
-          </WithStatusMarker>
-        );
-      }
-      return (
-        <WithStatusMarker status={item.connectionStatus}>
-          <ServerIcon />
-        </WithStatusMarker>
-      );
-    }
-  }, [item]);
-
   const onAction = useCallback(
     (action: Actions) => {
       if (item.type !== 'placeholder') {
@@ -184,20 +144,21 @@ export function NavigationItem({
     }
     if (item.type === 'connection') {
       return {
-        'data-is-active': `${isActive}`,
+        'data-is-active': isActive.toString(),
         'data-connection-id': item.connectionInfo.id,
         'data-connection-name': item.name,
+        'data-is-connected': (item.connectionStatus === 'connected').toString(),
       };
     }
     if (item.type === 'database') {
       return {
-        'data-is-active': `${isActive}`,
+        'data-is-active': isActive.toString(),
         'data-connection-id': item.connectionId,
         'data-database-name': item.dbName,
       };
     }
     return {
-      'data-is-active': `${isActive}`,
+      'data-is-active': isActive.toString(),
       'data-connection-id': item.connectionId,
       'data-namespace': item.namespace,
     };
@@ -211,16 +172,14 @@ export function NavigationItem({
       return [];
     }
 
-    const actions: ItemAction<
-      'open-non-genuine-mongodb-modal' | 'open-csfle-modal'
-    >[] = [];
+    const actions: ItemAction<Actions>[] = [];
     if (!item.isGenuineMongoDB) {
       actions.push({
         action: 'open-non-genuine-mongodb-modal',
         label: 'Non-Genuine MongoDB',
         tooltip: 'Non-Genuine MongoDB detected',
         icon: 'Warning',
-        actionButtonClassName: cx(nonGenuineBtnStyles, {
+        className: cx(nonGenuineBtnStyles, {
           [nonGenuineBtnStylesDarkMode]: isDarkMode,
         }),
       });
@@ -232,7 +191,7 @@ export function NavigationItem({
         label: 'In-Use Encryption',
         tooltip: 'Configure In-Use Encryption',
         icon: item.csfleMode === 'enabled' ? 'Lock' : 'Unlock',
-        actionButtonClassName: cx(csfleBtnStyles, {
+        className: cx(csfleBtnStyles, {
           [csfleBtnStylesDarkMode]: isDarkMode,
         }),
       });
@@ -240,6 +199,12 @@ export function NavigationItem({
 
     return actions;
   }, [item, isDarkMode]);
+
+  const toggleExpand = useCallback(() => {
+    if (item.type !== 'placeholder') {
+      onItemExpand(item, !item.isExpanded);
+    }
+  }, [onItemExpand, item]);
 
   return (
     <StyledNavigationItem item={item}>
@@ -250,29 +215,29 @@ export function NavigationItem({
           isActive={isActive}
           isFocused={isFocused}
           isExpanded={!!item.isExpanded}
-          icon={itemIcon}
+          hasDefaultAction={
+            item.type !== 'connection' || item.connectionStatus === 'connected'
+          }
+          icon={<NavigationItemIcon item={item} />}
           name={item.name}
           style={style}
           dataAttributes={itemDataProps}
           isExpandVisible={item.isExpandable}
           isExpandDisabled={
-            item.type === 'connection' &&
-            item.connectionStatus === 'disconnected'
+            item.type === 'connection' && item.connectionStatus !== 'connected'
           }
-          onExpand={(isExpanded: boolean) => {
-            onItemExpand(item, isExpanded);
-          }}
+          toggleExpand={toggleExpand}
           actionProps={actionProps}
         >
           {!!connectionStaticActions.length && (
-            <ItemActionControls<Actions>
+            <ItemActionControls
               iconSize="xsmall"
               actions={connectionStaticActions}
               onAction={onAction}
               // these are static buttons that we want visible always on the
               // sidebar, not as menu item but as action group
               collapseAfter={connectionStaticActions.length}
-            ></ItemActionControls>
+            />
           )}
         </NavigationBaseItem>
       )}

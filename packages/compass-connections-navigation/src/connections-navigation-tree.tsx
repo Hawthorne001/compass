@@ -27,20 +27,12 @@ import {
   databaseItemActions,
   notConnectedConnectionItemActions,
 } from './item-actions';
-import { ConnectionStatus } from '@mongodb-js/compass-connections/provider';
 
-const MCContainer = css({
+const ConnectionsNavigationContainerStyles = css({
   display: 'flex',
   flex: '1 0 auto',
   height: `calc(100% - ${spacing[1600]}px - ${spacing[200]}px)`,
 });
-
-const SCContainer = css({
-  display: 'flex',
-  flex: '1 0 auto',
-  height: 0,
-});
-
 export interface ConnectionsNavigationTreeProps {
   connections: Connection[];
   activeWorkspace: WorkspaceTab | null;
@@ -60,9 +52,6 @@ const ConnectionsNavigationTree: React.FunctionComponent<
 }) => {
   const preferencesShellEnabled = usePreference('enableShell');
   const preferencesReadOnly = usePreference('readOnly');
-  const isSingleConnection = !usePreference(
-    'enableNewMultipleConnectionSystem'
-  );
   const isRenameCollectionEnabled = usePreference(
     'enableRenameCollectionModal'
   );
@@ -72,29 +61,17 @@ const ConnectionsNavigationTree: React.FunctionComponent<
   const treeData = useMemo(() => {
     return getVirtualTreeItems({
       connections,
-      isSingleConnection,
       expandedItems: expanded,
       preferencesReadOnly,
       preferencesShellEnabled,
     });
-  }, [
-    connections,
-    isSingleConnection,
-    expanded,
-    preferencesReadOnly,
-    preferencesShellEnabled,
-  ]);
+  }, [connections, expanded, preferencesReadOnly, preferencesShellEnabled]);
 
   const onDefaultAction: OnDefaultAction<SidebarActionableItem> = useCallback(
     (item, evt) => {
       if (item.type === 'connection') {
-        if (item.connectionStatus === ConnectionStatus.Connected) {
+        if (item.connectionStatus === 'connected') {
           onItemAction(item, 'select-connection');
-        } else if (
-          item.connectionStatus === ConnectionStatus.Disconnected ||
-          item.connectionStatus === ConnectionStatus.Failed
-        ) {
-          onItemAction(item, 'connection-connect');
         }
       } else if (item.type === 'database') {
         onItemAction(item, 'select-database');
@@ -119,11 +96,11 @@ const ConnectionsNavigationTree: React.FunctionComponent<
         return `${activeWorkspace.connectionId}.${activeWorkspace.namespace}`;
       }
       // Database List (of a connection)
-      if (activeWorkspace.type === 'Databases' && !isSingleConnection) {
+      if (activeWorkspace.type === 'Databases') {
         return activeWorkspace.connectionId;
       }
     }
-  }, [activeWorkspace, isSingleConnection]);
+  }, [activeWorkspace]);
 
   const getCollapseAfterForConnectedItem = useCallback(
     (actions: NavigationItemActions) => {
@@ -173,11 +150,12 @@ const ConnectionsNavigationTree: React.FunctionComponent<
             actions: [],
           };
         case 'connection': {
-          if (item.connectionStatus === ConnectionStatus.Connected) {
+          if (item.connectionStatus === 'connected') {
             const actions = connectedConnectionItemActions({
               hasWriteActionsDisabled: item.hasWriteActionsDisabled,
               isShellEnabled: item.isShellEnabled,
               connectionInfo: item.connectionInfo,
+              isPerformanceTabAvailable: item.isPerformanceTabAvailable,
               isPerformanceTabSupported: item.isPerformanceTabSupported,
             });
             return {
@@ -190,9 +168,10 @@ const ConnectionsNavigationTree: React.FunctionComponent<
             return {
               actions: notConnectedConnectionItemActions({
                 connectionInfo: item.connectionInfo,
+                connectionStatus: item.connectionStatus,
               }),
               config: {
-                collapseAfter: 0,
+                collapseAfter: 1,
               },
             };
           }
@@ -219,8 +198,13 @@ const ConnectionsNavigationTree: React.FunctionComponent<
   const isTestEnv = process.env.NODE_ENV === 'test';
 
   return (
-    <div className={isSingleConnection ? SCContainer : MCContainer}>
+    <div className={ConnectionsNavigationContainerStyles}>
       <VisuallyHidden id={id}>Databases and Collections</VisuallyHidden>
+      {/* AutoSizer types does not allow both width and height to be disabled
+        considering that to be a pointless usecase and hence the type
+        definitions are pretty strict. We require these disabled to avoid
+        tests flaking out hence ignoring the usage here.
+        @ts-ignore */}
       <AutoSizer disableWidth={isTestEnv} disableHeight={isTestEnv}>
         {({ width = isTestEnv ? 1024 : '', height = isTestEnv ? 768 : '' }) => (
           <VirtualTree<SidebarTreeItem>

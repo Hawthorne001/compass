@@ -1,7 +1,14 @@
-import { TEST_MULTIPLE_CONNECTIONS } from '../compass';
 import type { CompassBrowser } from '../compass-browser';
 import * as Selectors from '../selectors';
 import type { WorkspaceTabSelectorOptions } from '../selectors';
+
+type CollectionWorkspaceSubTab =
+  | 'Documents'
+  | 'Aggregations'
+  | 'Schema'
+  | 'Indexes'
+  | 'Validation'
+  | 'GlobalWrites';
 
 async function navigateToCollection(
   browser: CompassBrowser,
@@ -32,7 +39,7 @@ async function navigateToCollection(
     Selectors.SidebarFilterInput,
     `^(${dbName}|${collectionName})$`
   );
-  const collectionElement = await browser.$(collectionSelector);
+  const collectionElement = browser.$(collectionSelector);
 
   await collectionElement.waitForDisplayed();
 
@@ -51,12 +58,8 @@ export async function navigateToCollectionTab(
   connectionName: string,
   dbName: string,
   collectionName: string,
-  tabName:
-    | 'Documents'
-    | 'Aggregations'
-    | 'Schema'
-    | 'Indexes'
-    | 'Validation' = 'Documents',
+  tabName: CollectionWorkspaceSubTab = 'Documents',
+
   closeExistingTabs = true
 ): Promise<void> {
   await navigateToCollection(
@@ -66,17 +69,25 @@ export async function navigateToCollectionTab(
     collectionName,
     closeExistingTabs
   );
+
+  // wait for the tooltip to be gone
+  await browser.clickVisible(Selectors.SidebarFilterInput);
+  await browser
+    .$(Selectors.WorkspaceTabTooltip)
+    .waitForDisplayed({ reverse: true });
+
   await navigateWithinCurrentCollectionTabs(browser, tabName);
+
+  // I don't know why, but sometimes the tooltip is shown at this point again
+  await browser.clickVisible(Selectors.SidebarFilterInput);
+  await browser
+    .$(Selectors.WorkspaceTabTooltip)
+    .waitForDisplayed({ reverse: true });
 }
 
 export async function navigateWithinCurrentCollectionTabs(
   browser: CompassBrowser,
-  tabName:
-    | 'Documents'
-    | 'Aggregations'
-    | 'Schema'
-    | 'Indexes'
-    | 'Validation' = 'Documents'
+  tabName: CollectionWorkspaceSubTab = 'Documents'
 ): Promise<void> {
   const tab = browser.$(Selectors.collectionSubTab(tabName));
   const selectedTab = browser.$(Selectors.collectionSubTab(tabName, true));
@@ -87,6 +98,7 @@ export async function navigateWithinCurrentCollectionTabs(
 
   // otherwise select the tab and wait for it to become selected
   await browser.clickVisible(tab);
+
   await waitUntilActiveCollectionSubTab(browser, tabName);
 }
 
@@ -95,25 +107,17 @@ async function waitUntilActiveCollectionTab(
   connectionName: string,
   dbName: string,
   collectionName: string,
-  tabName:
-    | 'Documents'
-    | 'Aggregations'
-    | 'Schema'
-    | 'Indexes'
-    | 'Validation'
-    | null = null
+  tabName: CollectionWorkspaceSubTab | null = null
 ) {
   const options: WorkspaceTabSelectorOptions = {
+    type: 'Collection',
+    connectionName,
     namespace: `${dbName}.${collectionName}`,
     active: true,
   };
-  // Only add the connectionName for multiple connections because for some
-  // reason this sometimes flakes in single connections even though the tab is
-  // definitely there in the screenshot.
-  if (TEST_MULTIPLE_CONNECTIONS) {
-    options.connectionName = connectionName;
-  }
+
   await browser.$(Selectors.workspaceTab(options)).waitForDisplayed();
+
   if (tabName) {
     await waitUntilActiveCollectionSubTab(browser, tabName);
   }
@@ -121,12 +125,7 @@ async function waitUntilActiveCollectionTab(
 
 export async function waitUntilActiveCollectionSubTab(
   browser: CompassBrowser,
-  tabName:
-    | 'Documents'
-    | 'Aggregations'
-    | 'Schema'
-    | 'Indexes'
-    | 'Validation' = 'Documents'
+  tabName: CollectionWorkspaceSubTab = 'Documents'
 ) {
   await browser.$(Selectors.collectionSubTab(tabName, true)).waitForDisplayed();
 }

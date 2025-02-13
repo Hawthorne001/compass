@@ -1,4 +1,3 @@
-import { TEST_MULTIPLE_CONNECTIONS } from '../compass';
 import type { CompassBrowser } from '../compass-browser';
 import * as Selectors from '../selectors';
 import type { WorkspaceTabSelectorOptions } from '../selectors';
@@ -18,14 +17,11 @@ export async function waitUntilActiveDatabaseTab(
   connectionName: string,
   dbName: string
 ) {
-  const options: WorkspaceTabSelectorOptions = { title: dbName, active: true };
-
-  // Only add the connectionName for multiple connections because for some
-  // reason this sometimes flakes in single connections even though the tab is
-  // definitely there in the screenshot.
-  if (TEST_MULTIPLE_CONNECTIONS) {
-    options.connectionName = connectionName;
-  }
+  const options: WorkspaceTabSelectorOptions = {
+    connectionName,
+    namespace: dbName,
+    active: true,
+  };
 
   await browser.$(Selectors.workspaceTab(options)).waitForDisplayed();
 }

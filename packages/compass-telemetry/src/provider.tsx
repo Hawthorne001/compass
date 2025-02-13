@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { createServiceLocator } from 'hadron-app-registry';
 import { createTrack, type TelemetryServiceOptions } from './generic-track';
 import { useLogger } from '@mongodb-js/compass-logging/provider';
-import type { TrackFunction, TrackParameters } from './types';
+import type { TrackFunction } from './types';
 
 const noop = () => {
   // noop
@@ -52,6 +52,10 @@ type FirstArgument<F> = F extends (...args: [infer A, ...any]) => any
   ? A
   : never;
 
+/**
+ * @deprecated instead of using HOC, refactor class component to functional
+ * component
+ */
 function withTelemetry<
   T extends ((...args: any[]) => any) | { new (...args: any[]): any }
 >(ReactComponent: T): React.FunctionComponent<Omit<FirstArgument<T>, 'track'>> {
@@ -97,4 +101,4 @@ export function useTrackOnChange(
   }, [...dependencies, track, options.skipOnMount]);
 }
 
-export type { TrackFunction, TrackParameters };
+export type { TrackFunction };

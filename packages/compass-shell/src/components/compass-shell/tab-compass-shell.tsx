@@ -4,6 +4,7 @@ import {
   useOnTabReplace,
   useTabState,
 } from '@mongodb-js/compass-workspaces/provider';
+import type { EditorRef } from '@mongodb-js/compass-editor';
 import {
   Banner,
   Link,
@@ -17,9 +18,10 @@ import type { WorkerRuntime } from '@mongosh/node-runtime-worker-thread';
 import ShellInfoModal from '../shell-info-modal';
 import ShellHeader from '../shell-header/shell-header';
 import { usePreference } from 'compass-preferences-model/provider';
-import { Shell as _Shell } from '@mongosh/browser-repl';
+import { Shell } from '@mongosh/browser-repl';
 import type { RootState } from '../../stores/store';
 import { selectRuntimeById, saveHistory } from '../../stores/store';
+import { useLogger } from '@mongodb-js/compass-logging/provider';
 
 const compassShellStyles = css(
   {
@@ -44,13 +46,9 @@ const compassShellContainerStyles = css({
   borderTop: `1px solid ${palette.gray.dark2}`,
 });
 
-type ShellProps = React.ComponentProps<typeof _Shell>;
+type ShellProps = React.ComponentProps<typeof Shell>;
 
-type ShellRef = Extract<Required<ShellProps>['ref'], { current: any }>;
-
-type ShellType = ShellRef['current'];
-
-type ShellOutputEntry = Required<ShellProps>['initialOutput'][number];
+type ShellOutputEntry = Required<ShellProps>['output'][number];
 
 type CompassShellProps = {
   runtime: WorkerRuntime | null;
@@ -60,66 +58,82 @@ type CompassShellProps = {
   initialInput?: string;
 };
 
-function useInitialEval(initialEvaluate?: string | string[]) {
+function useInitialEval(
+  initialEvaluate: string | string[] | undefined,
+  isRender: boolean
+) {
   const [initialEvalApplied, setInitialEvalApplied] = useTabState(
     'initialEvalApplied',
     false
   );
   useEffect(() => {
-    setInitialEvalApplied(true);
-  }, [setInitialEvalApplied]);
+    // as soon as we render the first time, set it to true
+    if (isRender && !initialEvalApplied) {
+      setInitialEvalApplied(true);
+    }
+  }, [initialEvalApplied, setInitialEvalApplied, isRender]);
   return initialEvalApplied ? undefined : initialEvaluate;
 }
 
-const Shell = React.forwardRef<ShellType, ShellProps>(function Shell(
-  { initialEvaluate: _initialEvaluate, ...props },
-  ref
-) {
-  const shellRef = useRef<ShellType | null>(null);
-  const initialEvaluate = useInitialEval(_initialEvaluate);
-  const mergeRef = useCallback(
-    (shell: ShellType | null) => {
-      shellRef.current = shell;
-      if (typeof ref === 'function') {
-        ref(shell);
-      } else if (ref) {
-        ref.current = shell;
-      }
-    },
-    [ref]
-  );
-  useEffect(() => {
-    return rafraf(() => {
-      shellRef.current?.focusEditor();
-    });
-  }, []);
-  return (
-    <_Shell
-      ref={mergeRef}
-      initialEvaluate={initialEvaluate}
-      {...props}
-    ></_Shell>
-  );
-});
+let _mongoshVersion = '';
 
-const CompassShell: React.FC<CompassShellProps> = ({
+export const CompassShell: React.FC<CompassShellProps> = ({
   runtime,
   initialHistory,
   onHistoryChange,
-  initialEvaluate,
+  initialEvaluate: _initialEvaluate,
   initialInput,
 }) => {
   const enableShell = usePreference('enableShell');
-  const shellRef: ShellRef = useRef(null);
+  const canRenderShell = !!(enableShell && initialHistory && runtime);
+
+  // initialEvaluate will only be set on the first render of the browser-repl
+  // component
+  const initialEvaluate = useInitialEval(_initialEvaluate, canRenderShell);
+
+  const editorRef = useRef<EditorRef>(null);
+
+  const [isOperationInProgress, setIsOperationInProgress] = useTabState(
+    'isOperationInProgress',
+    false
+  );
+
   const [infoModalVisible, setInfoModalVisible] = useState(false);
-  const [isOperationInProgress, setIsOperationInProgress] = useState(false);
-  const [shellOutput, setShellOutput] = useTabState<
-    readonly ShellOutputEntry[]
-  >('shellOutput', []);
+  const [shellOutput, setShellOutput] = useTabState<ShellOutputEntry[]>(
+    'shellOutput',
+    []
+  );
   const [shellInput, setShellInput] = useTabState(
     'shellInput',
     initialInput ?? ''
   );
+
+  const [mongoshVersion, setMongoshVersion] = useTabState(
+    'mongoshVersion',
+    _mongoshVersion
+  );
+  const logger = useLogger('COMPASS-SHELL');
+
+  useEffect(() => {
+    const { log, mongoLogId } = logger;
+    if (!runtime || mongoshVersion) return;
+    runtime
+      .evaluate('version()')
+      .then((value) => {
+        setMongoshVersion((_mongoshVersion = 'v' + String(value.printable)));
+      })
+      .catch((err) => {
+        setMongoshVersion('[unknown]');
+        log.error(
+          mongoLogId(1_001_000_345),
+          'shell',
+          'could not evaluate mongosh version',
+          {
+            error: (err as Error).message,
+          }
+        );
+      });
+  }, [runtime, logger, mongoshVersion, setMongoshVersion]);
 
   useOnTabReplace(() => {
     // Never allow to replace the shell tab to avoid destroying the runtime
@@ -136,27 +150,26 @@ const CompassShell: React.FC<CompassShellProps> = ({
   }, []);
 
   const focusEditor = useCallback(() => {
-    if (shellRef.current && window.getSelection()?.type !== 'Range') {
-      shellRef.current.focusEditor();
+    if (editorRef.current && window.getSelection()?.type !== 'Range') {
+      editorRef.current.focus();
     }
   }, []);
 
-  const updateShellOutput = useCallback(
-    (output: readonly ShellOutputEntry[]) => {
-      setShellOutput(output);
-    },
-    [setShellOutput]
-  );
-
-  const notifyOperationStarted = useCallback(() => {
+  const onOperationStarted = useCallback(() => {
     setIsOperationInProgress(true);
-  }, []);
+  }, [setIsOperationInProgress]);
 
-  const notifyOperationEnd = useCallback(() => {
+  const onOperationEnd = useCallback(() => {
     setIsOperationInProgress(false);
-  }, []);
+  }, [setIsOperationInProgress]);
 
-  const canRenderShell = enableShell && initialHistory && runtime;
+  useEffect(() => {
+    if (canRenderShell) {
+      return rafraf(() => {
+        editorRef.current?.focus();
+      });
+    }
+  }, [canRenderShell]);
 
   if (!enableShell) {
     return (
@@ -173,13 +186,17 @@ const CompassShell: React.FC<CompassShellProps> = ({
     );
   }
 
-  if (!canRenderShell) {
+  if (!canRenderShell || !mongoshVersion) {
     return <div className={compassShellStyles} />;
   }
 
   return (
     <>
-      <ShellInfoModal show={infoModalVisible} hideInfoModal={hideInfoModal} />
+      <ShellInfoModal
+        show={infoModalVisible}
+        hideInfoModal={hideInfoModal}
+        mongoshVersion={mongoshVersion}
+      />
       {/* Clicking on the shell container to focus it is a ux improvement to give
           the shell more of a native shell feeling. We disable the jsx-ally rules
           as this is a unique ux improvement solely for clicking. */}
@@ -201,21 +218,20 @@ const CompassShell: React.FC<CompassShellProps> = ({
           className={compassShellContainerStyles}
         >
           <Shell
-            ref={shellRef}
             runtime={runtime}
-            initialEvaluate={initialEvaluate}
-            initialInput={shellInput}
-            onInputChanged={setShellInput}
-            initialOutput={shellOutput}
-            onOutputChanged={updateShellOutput}
-            initialHistory={initialHistory}
-            onHistoryChanged={(history) => {
-              onHistoryChange([...history]);
-            }}
-            onOperationStarted={notifyOperationStarted}
-            onOperationEnd={notifyOperationEnd}
             maxOutputLength={1000}
             maxHistoryLength={1000}
+            initialEvaluate={initialEvaluate}
+            initialText={shellInput}
+            onInputChanged={setShellInput}
+            output={shellOutput}
+            onOutputChanged={setShellOutput}
+            history={initialHistory}
+            onHistoryChanged={onHistoryChange}
+            onOperationStarted={onOperationStarted}
+            onOperationEnd={onOperationEnd}
+            isOperationInProgress={isOperationInProgress}
+            ref={editorRef}
           />
         </div>
       </div>

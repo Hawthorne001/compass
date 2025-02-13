@@ -1,4 +1,4 @@
-import type { Reducer } from 'redux';
+import type { Action, Reducer } from 'redux';
 import type { AnyAction } from 'redux';
 import type { ThunkAction } from 'redux-thunk';
 import type { WorkerRuntime } from '@mongosh/node-runtime-worker-thread';
@@ -6,7 +6,10 @@ import { ObjectId } from 'bson';
 import { createWorkerRuntime } from '../modules/worker-runtime';
 import type { ShellPluginExtraArgs } from '../plugin';
 
-const RuntimeMap = new Map<string, WorkerRuntime>();
+/**
+ * @internal exported for testing purposes
+ */
+export const RuntimeMap = new Map<string, WorkerRuntime>();
 
 type State = {
   // Reference to the shell runtime stored by id
@@ -49,7 +52,7 @@ export function isAction<A extends AnyAction>(
   return action.type === type;
 }
 
-const reducer: Reducer<State> = (
+const reducer: Reducer<State, Action> = (
   state = { runtimeId: null, history: null },
   action
 ) => {

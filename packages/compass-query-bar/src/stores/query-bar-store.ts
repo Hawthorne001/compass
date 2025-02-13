@@ -8,7 +8,7 @@ import thunk from 'redux-thunk';
 import type { AnyAction } from 'redux';
 import type { ThunkAction, ThunkDispatch } from 'redux-thunk';
 import type {
-  ConnectionInfoAccess,
+  ConnectionInfoRef,
   DataService,
 } from '@mongodb-js/compass-connections/provider';
 import { DEFAULT_FIELD_VALUES } from '../constants/query-bar-store';
@@ -27,7 +27,6 @@ import type { ActivateHelpers } from 'hadron-app-registry';
 import type { MongoDBInstance } from 'mongodb-instance-model';
 import { QueryBarStoreContext } from './context';
 import type { Logger } from '@mongodb-js/compass-logging/provider';
-import type { AtlasAuthService } from '@mongodb-js/atlas-service/provider';
 import type { AtlasAiService } from '@mongodb-js/compass-generative-ai/provider';
 import type {
   FavoriteQueryStorageAccess,
@@ -48,8 +47,7 @@ type QueryBarServices = {
   preferences: PreferencesAccess;
   logger: Logger;
   track: TrackFunction;
-  connectionInfoAccess: ConnectionInfoAccess;
-  atlasAuthService: AtlasAuthService;
+  connectionInfoRef: ConnectionInfoRef;
   atlasAiService: AtlasAiService;
   favoriteQueryStorageAccess?: FavoriteQueryStorageAccess;
   recentQueryStorageAccess?: RecentQueryStorageAccess;
@@ -58,7 +56,7 @@ type QueryBarServices = {
 // TODO(COMPASS-7412): this doesn't have service injector
 // implemented yet, so we're keeping it separate from the type above
 type QueryBarExtraServices = {
-  atlasAuthService?: AtlasAuthService;
+  atlasAIService?: AtlasAiService;
   favoriteQueryStorage?: FavoriteQueryStorage;
   recentQueryStorage?: RecentQueryStorage;
 };
@@ -76,13 +74,12 @@ export type QueryBarExtraArgs = {
   globalAppRegistry: AppRegistry;
   localAppRegistry: AppRegistry;
   dataService: Pick<QueryBarDataService, 'sample'>;
-  atlasAuthService: AtlasAuthService;
   preferences: PreferencesAccess;
   favoriteQueryStorage?: FavoriteQueryStorage;
   recentQueryStorage?: RecentQueryStorage;
   logger: Logger;
   track: TrackFunction;
-  connectionInfoAccess: ConnectionInfoAccess;
+  connectionInfoRef: ConnectionInfoRef;
   atlasAiService: AtlasAiService;
 };
 
@@ -125,8 +122,7 @@ export function activatePlugin(
     preferences,
     logger,
     track,
-    connectionInfoAccess,
-    atlasAuthService,
+    connectionInfoRef,
     atlasAiService,
     favoriteQueryStorageAccess,
     recentQueryStorageAccess,
@@ -156,11 +152,10 @@ export function activatePlugin(
       globalAppRegistry,
       recentQueryStorage,
       favoriteQueryStorage,
-      atlasAuthService,
       preferences,
       logger,
       track,
-      connectionInfoAccess,
+      connectionInfoRef,
       atlasAiService,
     }
   );

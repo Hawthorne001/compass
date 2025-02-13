@@ -1,5 +1,11 @@
 import toNS from 'mongodb-ns';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+} from 'react';
 import { connect } from 'react-redux';
 import {
   ChevronCollapse,
@@ -12,6 +18,8 @@ import {
   Button,
   Icon,
   ButtonVariant,
+  cx,
+  Placeholder,
 } from '@mongodb-js/compass-components';
 import { ConnectionsNavigationTree } from '@mongodb-js/compass-connections-navigation';
 import type { MapDispatchToProps, MapStateToProps } from 'react-redux';
@@ -30,21 +38,30 @@ import {
 } from '@mongodb-js/connection-info';
 import type { RootState, SidebarThunkAction } from '../../modules';
 import {
-  ConnectionStatus,
   type useConnectionsWithStatus,
+  ConnectionStatus,
+  useConnectionsListLoadingStatus,
 } from '@mongodb-js/compass-connections/provider';
-import { useOpenWorkspace } from '@mongodb-js/compass-workspaces/provider';
+import {
+  useOpenWorkspace,
+  useWorkspacePlugins,
+} from '@mongodb-js/compass-workspaces/provider';
 import {
   onDatabaseExpand,
   fetchAllCollections,
   type Database,
 } from '../../modules/databases';
-import { useFilteredConnections } from '../use-filtered-connections';
+import {
+  type ConnectionsFilter,
+  useFilteredConnections,
+} from '../use-filtered-connections';
 import NavigationItemsFilter from '../navigation-items-filter';
 import {
   type ConnectionImportExportAction,
   useOpenConnectionImportExportModal,
 } from '@mongodb-js/compass-connection-import-export';
+import { useTelemetry } from '@mongodb-js/compass-telemetry/provider';
+import { usePreference } from 'compass-preferences-model/provider';
 
 const connectionsContainerStyles = css({
   height: '100%',
@@ -75,9 +92,8 @@ const connectionCountStyles = css({
   marginLeft: spacing[100],
 });
 
-const searchStyles = css({
-  paddingLeft: spacing[400],
-  paddingRight: spacing[400],
+const connectionCountDisabledStyles = css({
+  opacity: 0.6,
 });
 
 const noDeploymentStyles = css({
@@ -87,6 +103,12 @@ const noDeploymentStyles = css({
   flexDirection: 'column',
   gap: spacing[200],
 });
+
+/**
+ * Indicates only Atlas cluster connections are supported, and the user cannot navigate
+ * to other types of connections from this UI.
+ */
+export const AtlasClusterConnectionsOnly = createContext<boolean>(false);
 
 function findCollection(ns: string, databases: Database[]) {
   const { database, collection } = toNS(ns);
@@ -106,8 +128,10 @@ type ConnectionListTitleActions =
 type ConnectionsNavigationComponentProps = {
   connectionsWithStatus: ReturnType<typeof useConnectionsWithStatus>;
   activeWorkspace: WorkspaceTab | null;
-  filterRegex: RegExp | null;
-  onFilterChange(regex: RegExp | null): void;
+  filter: ConnectionsFilter;
+  onFilterChange(
+    updater: (filter: ConnectionsFilter) => ConnectionsFilter
+  ): void;
   onConnect(info: ConnectionInfo): void;
   onNewConnection(): void;
   onEditConnection(info: ConnectionInfo): void;
@@ -117,9 +141,11 @@ type ConnectionsNavigationComponentProps = {
   onToggleFavoriteConnectionInfo(info: ConnectionInfo): void;
   onOpenCsfleModal(connectionId: string): void;
   onOpenNonGenuineMongoDBModal(connectionId: string): void;
-
   onOpenConnectionInfo(id: string): void;
   onDisconnect(id: string): void;
+  onOpenConnectViaModal?: (
+    atlasMetadata: ConnectionInfo['atlasMetadata']
+  ) => void;
 };
 
 type MapStateProps = {
@@ -146,7 +172,7 @@ type ConnectionsNavigationProps = ConnectionsNavigationComponentProps &
 const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
   connectionsWithStatus,
   activeWorkspace,
-  filterRegex,
+  filter,
   instances,
   databases,
   isPerformanceTabSupported,
@@ -160,13 +186,13 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
   onToggleFavoriteConnectionInfo,
   onOpenCsfleModal,
   onOpenNonGenuineMongoDBModal,
-
   onOpenConnectionInfo,
   onDisconnect,
   onDatabaseExpand,
   fetchAllCollections,
   onRefreshDatabases: _onRefreshDatabases,
   onNamespaceAction: _onNamespaceAction,
+  onOpenConnectViaModal,
 }) => {
   const {
     openShellWorkspace,
@@ -176,6 +202,8 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
     openCollectionWorkspace,
     openEditViewWorkspace,
   } = useOpenWorkspace();
+  const { hasWorkspacePlugin } = useWorkspacePlugins();
+  const track = useTelemetry();
   const connections = useMemo(() => {
     const connections: SidebarConnection[] = [];
 
@@ -206,6 +234,7 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
           isReady,
           isDataLake,
           isWritable,
+          isPerformanceTabAvailable: hasWorkspacePlugin('Performance'),
           isPerformanceTabSupported: isPerformanceTabSupportedOnConnection,
           name: getConnectionTitle(connection),
           connectionInfo: connection,
@@ -221,10 +250,20 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
       }
     }
     return connections;
-  }, [connectionsWithStatus, instances, databases, isPerformanceTabSupported]);
+  }, [
+    connectionsWithStatus,
+    instances,
+    databases,
+    isPerformanceTabSupported,
+    hasWorkspacePlugin,
+  ]);
 
   const { supportsConnectionImportExport, openConnectionImportExportModal } =
     useOpenConnectionImportExportModal({ context: 'connectionsList' });
+
+  const enableCreatingNewConnections = usePreference(
+    'enableCreatingNewConnections'
+  );
 
   const {
     filtered,
@@ -234,7 +273,7 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
     onDatabaseToggle,
   } = useFilteredConnections({
     connections,
-    filterRegex,
+    filter,
     fetchAllCollections,
     onDatabaseExpand,
   });
@@ -247,12 +286,15 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
           label: 'Collapse all connections',
           icon: <ChevronCollapse width={14} height={14} />,
         },
-        {
+      ];
+
+      if (enableCreatingNewConnections) {
+        actions.push({
           action: 'add-new-connection',
           label: 'Add new connection',
           icon: 'Plus',
-        },
-      ];
+        });
+      }
 
       if (supportsConnectionImportExport) {
         actions.push(
@@ -270,7 +312,7 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
       }
 
       return actions;
-    }, [supportsConnectionImportExport]);
+    }, [supportsConnectionImportExport, enableCreatingNewConnections]);
 
   const onConnectionItemAction = useCallback(
     (
@@ -291,6 +333,7 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
           return;
         case 'open-shell':
           openShellWorkspace(item.connectionInfo.id, { newTab: true });
+          track('Open Shell', { entrypoint: 'sidebar' }, item.connectionInfo);
           return;
         case 'connection-performance-metrics':
           openPerformanceWorkspace(item.connectionInfo.id);
@@ -325,13 +368,17 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
         case 'open-non-genuine-mongodb-modal':
           onOpenNonGenuineMongoDBModal(item.connectionInfo.id);
           return;
+        case 'show-connect-via-modal':
+          onOpenConnectViaModal?.(item.connectionInfo.atlasMetadata);
+          return;
       }
     },
     [
+      openDatabasesWorkspace,
       _onRefreshDatabases,
       _onNamespaceAction,
       openShellWorkspace,
-      openDatabasesWorkspace,
+      track,
       openPerformanceWorkspace,
       onOpenConnectionInfo,
       onDisconnect,
@@ -343,6 +390,7 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
       onRemoveConnection,
       onOpenCsfleModal,
       onOpenNonGenuineMongoDBModal,
+      onOpenConnectViaModal,
     ]
   );
 
@@ -448,16 +496,28 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
     }
   }, [activeWorkspace, onDatabaseToggle, onConnectionToggle]);
 
+  const isAtlasConnectionStorage = useContext(AtlasClusterConnectionsOnly);
+
+  const { isInitialLoad: isInitialConnectionsLoad } =
+    useConnectionsListLoadingStatus();
+
+  const connectionsCount = isInitialConnectionsLoad ? (
+    <span className={cx(connectionCountStyles, connectionCountDisabledStyles)}>
+      (…)
+    </span>
+  ) : connections.length !== 0 ? (
+    <span className={connectionCountStyles}>({connections.length})</span>
+  ) : undefined;
+
   return (
     <div className={connectionsContainerStyles}>
-      <div className={connectionListHeaderStyles}>
+      <div
+        className={connectionListHeaderStyles}
+        data-testid="connections-header"
+      >
         <Subtitle className={connectionListHeaderTitleStyles}>
-          Connections
-          {connections.length !== 0 && (
-            <span className={connectionCountStyles}>
-              ({connections.length})
-            </span>
-          )}
+          {isAtlasConnectionStorage ? 'Clusters' : 'Connections'}
+          {connectionsCount}
         </Subtitle>
         <ItemActionControls<ConnectionListTitleActions>
           iconSize="xsmall"
@@ -468,37 +528,70 @@ const ConnectionsNavigation: React.FC<ConnectionsNavigationProps> = ({
           collapseAfter={2}
         ></ItemActionControls>
       </div>
-      {connections.length ? (
-        <>
-          <NavigationItemsFilter
-            searchInputClassName={searchStyles}
-            placeholder="Search connections"
-            onFilterChange={onFilterChange}
-          />
-          <ConnectionsNavigationTree
-            connections={filtered || connections}
-            activeWorkspace={activeWorkspace}
-            onItemAction={onItemAction}
-            onItemExpand={onItemExpand}
-            expanded={expanded}
-          />
-        </>
-      ) : (
+      <NavigationItemsFilter
+        placeholder={
+          isAtlasConnectionStorage ? 'Search clusters' : 'Search connections'
+        }
+        filter={filter}
+        onFilterChange={onFilterChange}
+        disabled={isInitialConnectionsLoad || connections.length === 0}
+      />
+      {isInitialConnectionsLoad ? (
+        <ConnectionsPlaceholder></ConnectionsPlaceholder>
+      ) : connections.length > 0 ? (
+        <ConnectionsNavigationTree
+          connections={filtered || connections}
+          activeWorkspace={activeWorkspace}
+          onItemAction={onItemAction}
+          onItemExpand={onItemExpand}
+          expanded={expanded}
+        />
+      ) : connections.length === 0 ? (
         <div className={noDeploymentStyles}>
-          <Body>You have not connected to any deployments.</Body>
-          <Button
-            data-testid="add-new-connection-button"
-            variant={ButtonVariant.Primary}
-            leftGlyph={<Icon glyph="Plus" />}
-            onClick={onNewConnection}
-          >
-            Add new connection
-          </Button>
+          <Body data-testid="no-deployments-text">
+            You have not connected to any deployments.
+          </Body>
+          {enableCreatingNewConnections && (
+            <Button
+              data-testid="add-new-connection-button"
+              variant={ButtonVariant.Primary}
+              leftGlyph={<Icon glyph="Plus" />}
+              onClick={onNewConnection}
+            >
+              Add new connection
+            </Button>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
+
+const placeholderListStyles = css({
+  display: 'grid',
+  gridTemplateColumns: '1fr',
+  // placeholder height that visually matches font size (16px) + vertical
+  // spacing (12px) to align it visually with real items
+  gridAutoRows: spacing[400] + spacing[300],
+  alignItems: 'center',
+  // navigation list padding + "empty" caret icon space (4px) to align it
+  // visually with real items
+  paddingLeft: spacing[400] + spacing[100],
+  paddingRight: spacing[400],
+});
+
+function ConnectionsPlaceholder() {
+  return (
+    <div
+      data-testid="connections-placeholder"
+      className={placeholderListStyles}
+    >
+      {Array.from({ length: 3 }, (_, index) => (
+        <Placeholder key={index} height={spacing[400]}></Placeholder>
+      ))}
+    </div>
+  );
+}
 
 const onRefreshDatabases = (connectionId: string): SidebarThunkAction<void> => {
   return (_dispatch, getState, { globalAppRegistry }) => {

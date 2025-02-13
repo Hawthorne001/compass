@@ -7,7 +7,7 @@ const debug = Debug('compass-e2e-tests');
 export async function navigateToMyQueries(browser: CompassBrowser) {
   await browser.clickVisible(Selectors.SidebarMyQueriesTab);
   await browser
-    .$(Selectors.workspaceTab({ title: 'My Queries', active: true }))
+    .$(Selectors.workspaceTab({ type: 'My Queries', active: true }))
     .waitForDisplayed();
 }
 
@@ -19,6 +19,8 @@ async function closeTab(
   // wait until the tab goes away and if the confirmation modal opens, maybe confirm
   await browser.waitUntil(
     async () => {
+      // first hover the tab so that the close button shows up
+      await browser.hover(Selectors.workspaceTab(selectorOptions));
       // keep retrying the click :(
       await browser.clickVisible(
         browser
@@ -53,13 +55,13 @@ export async function closeWorkspaceTabs(
   autoConfirmTabClose = true
 ): Promise<void> {
   const countTabs = async () => {
-    return (await browser.$$(Selectors.workspaceTab())).length;
+    return await browser.$$(Selectors.workspaceTab()).length;
   };
 
   await browser.waitUntil(async () => {
     const numTabsStart = await countTabs();
     if (numTabsStart > 0) {
-      const currentActiveTab = await browser.$(
+      const currentActiveTab = browser.$(
         Selectors.workspaceTab({ active: true })
       );
 
@@ -83,19 +85,5 @@ export async function closeWorkspaceTab(
   browser: CompassBrowser,
   selectorOptions: WorkspaceTabSelectorOptions
 ): Promise<void> {
-  const currentTabId = await browser
-    .$(Selectors.workspaceTab({ active: true }))
-    .getAttribute('id');
-  const targetTabId = await browser
-    .$(Selectors.workspaceTab(selectorOptions))
-    .getAttribute('id');
-
-  if (currentTabId !== targetTabId) {
-    // The tab we want to close isn't the active one so the close button isn't
-    // visible. We can either focus it which would have the side-effect of
-    // changing the tab focus or we can try and hover over it.
-    await browser.hover(Selectors.workspaceTab(selectorOptions));
-  }
-
   await closeTab(browser, selectorOptions, true);
 }

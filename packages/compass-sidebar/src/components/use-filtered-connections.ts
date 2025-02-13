@@ -8,7 +8,6 @@ import type {
   SidebarConnection,
   SidebarNotConnectedConnection,
 } from '@mongodb-js/compass-connections-navigation';
-import { ConnectionStatus } from '@mongodb-js/compass-connections/provider';
 import { type ConnectionInfo } from '@mongodb-js/connection-info';
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 
@@ -43,13 +42,21 @@ type FilteredConnection = (
 
 const filterConnections = (
   connections: SidebarConnection[],
-  regex: RegExp
+  regex: RegExp | null,
+  excludeInactive: boolean
 ): FilteredConnection[] => {
   const results: FilteredConnection[] = [];
   for (const connection of connections) {
-    const isMatch = regex.test(connection.name);
+    // Conditionally skip connections that aren't considered active
+    const inactive =
+      connection.connectionStatus !== 'connected' &&
+      connection.connectionStatus !== 'connecting';
+    if (excludeInactive && inactive) {
+      continue;
+    }
+    const isMatch = !regex || regex.test(connection.name);
     let childMatches: FilteredDatabase[] = [];
-    if (connection.connectionStatus === ConnectionStatus.Connected) {
+    if (connection.connectionStatus === 'connected') {
       childMatches = filterDatabases(connection.databases, regex);
     }
 
@@ -57,7 +64,7 @@ const filterConnections = (
       results.push({
         ...connection,
         isMatch,
-        ...(connection.connectionStatus === ConnectionStatus.Connected
+        ...(connection.connectionStatus === 'connected'
           ? {
               databases:
                 !isMatch && childMatches.length
@@ -73,11 +80,11 @@ const filterConnections = (
 
 const filterDatabases = (
   databases: SidebarDatabase[],
-  regex: RegExp
+  regex: RegExp | null
 ): FilteredDatabase[] => {
   const results: FilteredDatabase[] = [];
   for (const db of databases) {
-    const isMatch = regex.test(db.name);
+    const isMatch = !regex || regex.test(db.name);
     const childMatches = filterCollections(db.collections, regex);
 
     if (isMatch || childMatches.length) {
@@ -90,7 +97,7 @@ const filterDatabases = (
           ? childMatches
           : db.collections.map((collection) => ({
               ...collection,
-              isMatch: regex.test(collection.name),
+              isMatch: !regex || regex.test(collection.name),
             }));
       results.push({
         ...db,
@@ -104,10 +111,10 @@ const filterDatabases = (
 
 const filterCollections = (
   collections: SidebarCollection[],
-  regex: RegExp
+  regex: RegExp | null
 ): FilteredCollection[] => {
   return collections
-    .filter(({ name }) => regex.test(name))
+    .filter(({ name }) => !regex || regex.test(name))
     .map((collection) => ({ ...collection, isMatch: true }));
 };
 
@@ -122,7 +129,7 @@ const temporarilyExpand = (
 ): ExpandedConnections => {
   const newExpanded = { ...expandedConnections };
   filterResults.forEach((connection) => {
-    if (connection.connectionStatus === ConnectionStatus.Connected) {
+    if (connection.connectionStatus === 'connected') {
       const {
         connectionInfo: { id: connectionId },
         databases,
@@ -206,7 +213,8 @@ const FILTER_CONNECTIONS =
 interface FilterConnectionsAction {
   type: typeof FILTER_CONNECTIONS;
   connections: SidebarConnection[];
-  filterRegex: RegExp;
+  filterRegex: RegExp | null;
+  excludeInactive: boolean;
 }
 
 const CLEAR_FILTER = 'sidebar/active-connections/CLEAR_FILTER' as const;
@@ -266,7 +274,8 @@ const connectionsReducer = (
     case FILTER_CONNECTIONS: {
       const filtered = filterConnections(
         action.connections,
-        action.filterRegex
+        action.filterRegex,
+        action.excludeInactive
       );
       const persistingExpanded = revertTemporaryExpanded(state.expanded);
       return {
@@ -358,7 +367,7 @@ function filteredConnectionsToSidebarConnection(
 ): SidebarConnection[] {
   const sidebarConnections: SidebarConnection[] = [];
   for (const connection of filteredConnections) {
-    if (connection.connectionStatus === ConnectionStatus.Connected) {
+    if (connection.connectionStatus === 'connected') {
       sidebarConnections.push({
         ..._.omit(connection, ['isMatch']),
         databases: connection.databases.map((database) => {
@@ -379,14 +388,19 @@ function filteredConnectionsToSidebarConnection(
   return sidebarConnections;
 }
 
+export type ConnectionsFilter = {
+  regex: RegExp | null;
+  excludeInactive: boolean;
+};
+
 export const useFilteredConnections = ({
   connections,
-  filterRegex,
+  filter,
   fetchAllCollections,
   onDatabaseExpand,
 }: {
   connections: SidebarConnection[];
-  filterRegex: RegExp | null;
+  filter: ConnectionsFilter;
   fetchAllCollections: () => void;
   onDatabaseExpand: (connectionId: string, databaseId: string) => void;
 }): UseFilteredConnectionsHookResult => {
@@ -398,7 +412,7 @@ export const useFilteredConnections = ({
   const activeConnections = useMemo(() => {
     return connections
       .filter(({ connectionStatus }) => {
-        return connectionStatus === ConnectionStatus.Connected;
+        return connectionStatus === 'connected';
       })
       .map(({ connectionInfo }) => connectionInfo);
   }, [connections]);
@@ -411,11 +425,12 @@ export const useFilteredConnections = ({
   // filter updates
   // connections change often, but the effect only uses connections if the filter is active
   // so we use this conditional dependency to avoid too many calls
-  const connectionsButOnlyIfFilterIsActive = filterRegex && connections;
+  const connectionsWhenFiltering =
+    (filter.regex || filter.excludeInactive) && connections;
   useEffect(() => {
-    if (!filterRegex) {
+    if (!filter.regex && !filter.excludeInactive) {
       dispatch({ type: CLEAR_FILTER });
-    } else if (connectionsButOnlyIfFilterIsActive) {
+    } else if (connectionsWhenFiltering) {
       // the above check is extra just to please TS
 
       // When filtering, emit an event so that we can fetch all collections. This
@@ -425,11 +440,17 @@ export const useFilteredConnections = ({
 
       dispatch({
         type: FILTER_CONNECTIONS,
-        connections: connectionsButOnlyIfFilterIsActive,
-        filterRegex,
+        connections: connectionsWhenFiltering,
+        filterRegex: filter.regex,
+        excludeInactive: filter.excludeInactive,
       });
     }
-  }, [filterRegex, connectionsButOnlyIfFilterIsActive, fetchAllCollections]);
+  }, [
+    filter.regex,
+    filter.excludeInactive,
+    connectionsWhenFiltering,
+    fetchAllCollections,
+  ]);
 
   const onConnectionToggle = useCallback(
     (connectionId: string, expand: boolean) =>
@@ -467,7 +488,7 @@ export const useFilteredConnections = ({
     useMemo(() => {
       const result: Record<string, false | Record<string, boolean>> = {};
       for (const { connectionInfo, connectionStatus } of connections) {
-        if (connectionStatus !== ConnectionStatus.Connected) {
+        if (connectionStatus !== 'connected') {
           result[connectionInfo.id] = false;
           continue;
         }

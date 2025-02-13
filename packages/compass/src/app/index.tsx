@@ -5,6 +5,7 @@ import dns from 'dns';
 import ensureError from 'ensure-error';
 import { ipcRenderer } from 'hadron-ipc';
 import * as remote from '@electron/remote';
+import { webUtils } from 'electron';
 import { globalAppRegistry } from 'hadron-app-registry';
 import { defaultPreferencesInstance } from 'compass-preferences-model';
 import semver from 'semver';
@@ -81,10 +82,9 @@ import {
   onAutoupdateSuccess,
 } from './components/update-toasts';
 import { createElectronFileInputBackend } from '@mongodb-js/compass-components';
-import {
-  CompassRendererConnectionStorage,
-  type AutoConnectPreferences,
-} from '@mongodb-js/connection-storage/renderer';
+import { CompassRendererConnectionStorage } from '@mongodb-js/connection-storage/renderer';
+import type { SettingsTabId } from '@mongodb-js/compass-settings';
+import type { AutoConnectPreferences } from '../main/auto-connect';
 const { log, mongoLogId } = createLogger('COMPASS-APP');
 const track = createIpcTrack();
 
@@ -103,12 +103,8 @@ function hideCollectionSubMenu() {
   void ipcRenderer?.call('window:hide-collection-submenu');
 }
 
-function notifyMainProcessOfDisconnect() {
-  void ipcRenderer?.call('compass:disconnected');
-}
-
-function showSettingsModal() {
-  ipcRenderer?.emit('window:show-settings');
+function showSettingsModal(tab?: SettingsTabId) {
+  globalAppRegistry?.emit('open-compass-settings', tab);
 }
 
 async function getWindowAutoConnectPreferences(): Promise<AutoConnectPreferences> {
@@ -166,14 +162,15 @@ const Application = View.extend({
       name,
       value,
     }: Pick<webvitals.Metric, 'name' | 'value'>) {
-      const fullName = {
+      const events = {
         FCP: 'First Contentful Paint',
         LCP: 'Largest Contentful Paint',
         FID: 'First Input Delay',
         CLS: 'Cumulative Layout Shift',
         TTFB: 'Time to First Byte',
-      }[name];
-      track(fullName, { value });
+      } as const;
+
+      track(events[name], { value });
     }
 
     webvitals.getFCP(trackPerfEvent);
@@ -213,15 +210,9 @@ const Application = View.extend({
     await defaultPreferencesInstance.refreshPreferences();
     const initialAutoConnectPreferences =
       await getWindowAutoConnectPreferences();
-    const getInitialAutoConnectPreferences =
-      (): Promise<AutoConnectPreferences> => {
-        return Promise.resolve(initialAutoConnectPreferences);
-      };
     const isSecretStorageAvailable = await checkSecretStorageIsAvailable();
-    const connectionStorage = new CompassRendererConnectionStorage(
-      ipcRenderer,
-      getInitialAutoConnectPreferences
-    );
+    const connectionStorage = new CompassRendererConnectionStorage(ipcRenderer);
+
     log.info(
       mongoLogId(1_001_000_092),
       'Main Window',
@@ -248,12 +239,23 @@ const Application = View.extend({
         <CompassElectron
           appName={remote.app.getName()}
           showWelcomeModal={!wasNetworkOptInShown}
-          createFileInputBackend={createElectronFileInputBackend(remote)}
-          onDisconnect={notifyMainProcessOfDisconnect}
+          createFileInputBackend={createElectronFileInputBackend(
+            remote,
+            webUtils
+          )}
           showCollectionSubMenu={showCollectionSubMenu}
           hideCollectionSubMenu={hideCollectionSubMenu}
           showSettings={showSettingsModal}
           connectionStorage={connectionStorage}
+          onAutoconnectInfoRequest={
+            initialAutoConnectPreferences.shouldAutoConnect
+              ? () => {
+                  return connectionStorage.getAutoConnectInfo(
+                    initialAutoConnectPreferences
+                  );
+                }
+              : undefined
+          }
         />
       </React.StrictMode>,
       this.queryByHook('layout-container')
@@ -265,7 +267,9 @@ const Application = View.extend({
         title:
           'Compass cannot access credential storage. You can still connect, but please note that passwords will not be saved.',
       });
-      track('Secret Storage Not Available');
+      track('Secret Storage Not Available', {
+        //
+      });
     }
 
     document.querySelector('#loading-placeholder')?.remove();
@@ -375,9 +379,15 @@ const app = {
       });
     }
 
+    log.info(mongoLogId(1_001_000_338), 'Main Window', 'Recent version info', {
+      previousVersion: state.previousVersion,
+      highestInstalledVersion: state.highestInstalledVersion,
+      APP_VERSION,
+    });
+
     if (
-      semver.gt(APP_VERSION, state.previousVersion) &&
-      state.previousVersion !== DEFAULT_APP_VERSION
+      state.previousVersion !== DEFAULT_APP_VERSION &&
+      APP_VERSION !== state.previousVersion
     ) {
       // Wait a bit before showing the update toast.
       setTimeout(() => {

@@ -5,10 +5,9 @@ import {
   init,
   cleanup,
   screenshotIfFailed,
-  DEFAULT_CONNECTION_STRING,
+  DEFAULT_CONNECTION_STRING_1,
   skipForWeb,
-  TEST_MULTIPLE_CONNECTIONS,
-  DEFAULT_CONNECTION_NAME,
+  DEFAULT_CONNECTION_NAME_1,
 } from '../helpers/compass';
 import type { Compass } from '../helpers/compass';
 import * as Selectors from '../helpers/selectors';
@@ -19,17 +18,21 @@ const { expect } = chai;
 describe('Instance sidebar', function () {
   let compass: Compass;
   let browser: CompassBrowser;
-  let connectionId: string | undefined;
+  let connectionId: string;
 
   before(async function () {
     compass = await init(this.test?.fullTitle());
     browser = compass.browser;
+    await browser.setupDefaultConnections();
   });
 
   beforeEach(async function () {
     await createNumbersCollection();
-    await browser.connectWithConnectionString();
-    connectionId = await browser.getConnectionIdByName(DEFAULT_CONNECTION_NAME);
+    await browser.disconnectAll();
+    await browser.connectToDefaults();
+    connectionId = await browser.getConnectionIdByName(
+      DEFAULT_CONNECTION_NAME_1
+    );
   });
 
   after(async function () {
@@ -43,20 +46,13 @@ describe('Instance sidebar', function () {
   it('has a connection info modal with connection info', async function () {
     skipForWeb(this, "these actions don't exist in compass-web");
 
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      await browser.selectConnectionMenuItem(
-        DEFAULT_CONNECTION_NAME,
-        Selectors.Multiple.ClusterInfoItem
-      );
-    } else {
-      await browser.clickVisible(Selectors.Single.ShowTitleActionsButton);
-      await browser.clickVisible(Selectors.Single.ClusterInfoItem);
-    }
+    await browser.selectConnectionMenuItem(
+      DEFAULT_CONNECTION_NAME_1,
+      Selectors.ClusterInfoItem
+    );
 
-    const modal = await browser.$(Selectors.ConnectionInfoModal);
+    const modal = browser.$(Selectors.ConnectionInfoModal);
     await modal.waitForDisplayed();
-
-    await browser.screenshot('connection-info-modal.png');
 
     await browser.clickVisible(Selectors.ConnectionInfoModalCloseButton);
     await modal.waitForDisplayed({ reverse: true });
@@ -65,7 +61,7 @@ describe('Instance sidebar', function () {
   it('contains a dbs/collections tree view', async function () {
     const dbName = 'test';
     const collectionName = 'numbers';
-    const dbElement = await browser.$(
+    const dbElement = browser.$(
       Selectors.sidebarDatabase(connectionId, dbName)
     );
     await dbElement.waitForDisplayed();
@@ -84,15 +80,15 @@ describe('Instance sidebar', function () {
       collectionSelector,
       'tree'
     );
-    const collectionElement = await browser.$(collectionSelector);
+    const collectionElement = browser.$(collectionSelector);
     await collectionElement.waitForDisplayed();
   });
 
   it('can search for a collection', async function () {
     // wait for something to appear so we can be sure that things went away vs just not appearing yet
     await browser.waitUntil(async () => {
-      const treeItems = await browser.$$(Selectors.SidebarTreeItems);
-      return treeItems.length > 0;
+      const numTreeItems = await browser.$$(Selectors.SidebarTreeItems).length;
+      return numTreeItems > 0;
     });
 
     // search for something that cannot be found to get the results to a known empty state
@@ -104,21 +100,21 @@ describe('Instance sidebar', function () {
 
     // make sure there's nothing visible
     await browser.waitUntil(async () => {
-      const treeItems = await browser.$$(Selectors.SidebarTreeItems);
-      return treeItems.length === 0;
+      const numTreeItems = await browser.$$(Selectors.SidebarTreeItems).length;
+      return numTreeItems === 0;
     });
 
     // now search for something specific
     await browser.setValueVisible(Selectors.SidebarFilterInput, 'numbers');
 
     await browser.waitUntil(async () => {
-      const treeItems = await browser.$$(Selectors.SidebarTreeItems);
-      // connection, database, collection for multiple connections, otherwise just database and collection
-      const expectedCount = TEST_MULTIPLE_CONNECTIONS ? 3 : 2;
-      return treeItems.length === expectedCount;
+      const numTreeItems = await browser.$$(Selectors.SidebarTreeItems).length;
+      // connection, database, collection (twice because there are two
+      // connections)
+      return numTreeItems === 6;
     });
 
-    const dbElement = await browser.$(
+    const dbElement = browser.$(
       Selectors.sidebarDatabase(connectionId, 'test')
     );
     expect(await dbElement.isDisplayed()).to.be.true;
@@ -134,14 +130,14 @@ describe('Instance sidebar', function () {
       'tree'
     );
 
-    const collectionElement = await browser.$(collectionSelector);
+    const collectionElement = browser.$(collectionSelector);
     expect(await collectionElement.isDisplayed()).to.be.true;
 
     await browser.setValueVisible(Selectors.SidebarFilterInput, '*');
 
     // wait for something that didn't match the previous search to show up to make sure that it reset
     // (otherwise future tests will fail because the new dbs/collections won't match the filter)
-    const adminElement = await browser.$(
+    const adminElement = browser.$(
       Selectors.sidebarDatabase(connectionId, 'admin')
     );
     await adminElement.waitForDisplayed();
@@ -151,33 +147,23 @@ describe('Instance sidebar', function () {
     // TODO(COMPASS-7086): flaky test
     this.retries(5);
 
-    const Sidebar = TEST_MULTIPLE_CONNECTIONS
-      ? Selectors.Multiple
-      : Selectors.Single;
-
     const dbName = `my-sidebar-database-${Date.now()}`;
     const collectionName = 'my-collection';
 
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      // navigate to the databases tab so that the connection is
-      // active/highlighted and then the add button and three dot menu will
-      // display without needing to hover
-      await browser.navigateToConnectionTab(
-        DEFAULT_CONNECTION_NAME,
-        'Databases'
-      );
-    }
+    // navigate to the databases tab so that the connection is
+    // active/highlighted and then the add button and three dot menu will
+    // display without needing to hover
+    await browser.navigateToConnectionTab(
+      DEFAULT_CONNECTION_NAME_1,
+      'Databases'
+    );
 
     // open the create database modal from the sidebar
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      await browser.selectConnectionMenuItem(
-        DEFAULT_CONNECTION_NAME,
-        Sidebar.CreateDatabaseButton,
-        false
-      );
-    } else {
-      await browser.clickVisible(Sidebar.CreateDatabaseButton);
-    }
+    await browser.selectConnectionMenuItem(
+      DEFAULT_CONNECTION_NAME_1,
+      Selectors.CreateDatabaseButton,
+      false
+    );
 
     await browser.addDatabase(dbName, collectionName);
 
@@ -191,12 +177,12 @@ describe('Instance sidebar', function () {
     await browser.clickVisible(Selectors.sidebarDatabase(connectionId, dbName));
 
     // wait for it to appear
-    const collectionElement = await browser.$(
+    const collectionElement = browser.$(
       Selectors.sidebarCollection(connectionId, dbName, collectionName)
     );
     await collectionElement.waitForDisplayed();
 
-    await browser.dropDatabaseFromSidebar(DEFAULT_CONNECTION_NAME, dbName);
+    await browser.dropDatabaseFromSidebar(DEFAULT_CONNECTION_NAME_1, dbName);
   });
 
   it('can create a collection and drop it', async function () {
@@ -206,7 +192,7 @@ describe('Instance sidebar', function () {
     await browser.clickVisible(Selectors.SidebarFilterInput);
     await browser.setValueVisible(Selectors.SidebarFilterInput, dbName);
 
-    const dbElement = await browser.$(
+    const dbElement = browser.$(
       Selectors.sidebarDatabase(connectionId, dbName)
     );
     await dbElement.waitForDisplayed();
@@ -224,7 +210,7 @@ describe('Instance sidebar', function () {
     await browser.$(tabSelectedSelector).waitForDisplayed();
 
     await browser.dropCollectionFromSidebar(
-      DEFAULT_CONNECTION_NAME,
+      DEFAULT_CONNECTION_NAME_1,
       dbName,
       collectionName
     );
@@ -238,12 +224,12 @@ describe('Instance sidebar', function () {
     await browser.clickVisible(Selectors.sidebarDatabase(connectionId, db));
 
     // wait until the collections finish loading
-    const numbersCollectionElement = await browser.$(
+    const numbersCollectionElement = browser.$(
       Selectors.sidebarCollection(connectionId, db, 'numbers')
     );
     await numbersCollectionElement.waitForDisplayed();
 
-    const mongoClient = new MongoClient(DEFAULT_CONNECTION_STRING);
+    const mongoClient = new MongoClient(DEFAULT_CONNECTION_STRING_1);
     await mongoClient.connect();
     try {
       const database = mongoClient.db(db);
@@ -252,17 +238,13 @@ describe('Instance sidebar', function () {
       await mongoClient.close();
     }
 
-    if (TEST_MULTIPLE_CONNECTIONS) {
-      await browser.selectConnectionMenuItem(
-        DEFAULT_CONNECTION_NAME,
-        Selectors.Multiple.RefreshDatabasesItem
-      );
-    } else {
-      await browser.clickVisible(Selectors.Single.RefreshDatabasesButton);
-    }
+    await browser.selectConnectionMenuItem(
+      DEFAULT_CONNECTION_NAME_1,
+      Selectors.RefreshDatabasesItem
+    );
 
     // wait for the new collection we added via the driver to appear.
-    const newCollectionElement = await browser.$(
+    const newCollectionElement = browser.$(
       Selectors.sidebarCollection(connectionId, db, coll)
     );
     await newCollectionElement.waitForDisplayed();

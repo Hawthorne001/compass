@@ -16,11 +16,7 @@ import {
   MongoDBLogoMark,
   MongoDBLogo,
 } from '@leafygreen-ui/logo';
-import {
-  Menu as UnwrappedMenu,
-  MenuSeparator,
-  MenuItem,
-} from '@leafygreen-ui/menu';
+import { Menu, MenuSeparator, MenuItem } from '@leafygreen-ui/menu';
 import { InfoSprinkle } from '@leafygreen-ui/info-sprinkle';
 
 // If a leafygreen Menu (and therefore MenuItems) makes its way into a <form>,
@@ -34,7 +30,7 @@ import { InfoSprinkle } from '@leafygreen-ui/info-sprinkle';
 import Modal, { Footer as ModalFooter } from '@leafygreen-ui/modal';
 import MarketingModal from '@leafygreen-ui/marketing-modal';
 import { Pipeline, Stage } from '@leafygreen-ui/pipeline';
-import UnwrappedPopover from '@leafygreen-ui/popover';
+import Popover from '@leafygreen-ui/popover';
 import { RadioBox, RadioBoxGroup } from '@leafygreen-ui/radio-box-group';
 import { Radio, RadioGroup } from '@leafygreen-ui/radio-group';
 import {
@@ -53,7 +49,11 @@ import {
   TableBody,
   flexRender,
   useLeafyGreenTable,
+  getExpandedRowModel,
+  getFilteredRowModel,
 } from '@leafygreen-ui/table';
+import type { Row as LgTableRowType } from '@tanstack/table-core'; // TODO(COMPASS-8437): import from LG
+
 export type {
   LGColumnDef,
   HeaderGroup,
@@ -71,6 +71,7 @@ export type { ToastProps } from '@leafygreen-ui/toast';
 export { ToastProvider, useToast } from '@leafygreen-ui/toast';
 export { usePrevious } from '@leafygreen-ui/hooks';
 import Toggle from '@leafygreen-ui/toggle';
+import Tooltip from '@leafygreen-ui/tooltip';
 import {
   H1,
   H2,
@@ -84,7 +85,11 @@ import {
   Label,
   Description,
 } from '@leafygreen-ui/typography';
-import { withStackedComponentPopoverStyles } from '../hooks/use-stacked-component';
+import {
+  Combobox,
+  ComboboxOption,
+  ComboboxGroup,
+} from '@leafygreen-ui/combobox';
 
 // 2. Wrap and make any changes/workaround to leafygreen components.
 const Icon = ({
@@ -105,12 +110,6 @@ delete (Checkbox as React.ComponentType<any>).propTypes;
 // all hrefs.
 export { Link, Button, IconButton } from './links/link';
 
-const Popover = withStackedComponentPopoverStyles(
-  UnwrappedPopover as any
-) as typeof UnwrappedPopover;
-const Menu = withStackedComponentPopoverStyles(
-  UnwrappedMenu as any
-) as typeof UnwrappedMenu;
 // 3. Export the leafygreen components.
 export {
   AtlasNavGraphic,
@@ -155,6 +154,7 @@ export {
   TextArea,
   TextInput,
   Toggle,
+  Tooltip,
   H1,
   H2,
   H3,
@@ -170,4 +170,10 @@ export {
   InfoSprinkle,
   flexRender,
   useLeafyGreenTable,
+  getExpandedRowModel,
+  getFilteredRowModel,
+  type LgTableRowType,
+  Combobox,
+  ComboboxGroup,
+  ComboboxOption,
 };

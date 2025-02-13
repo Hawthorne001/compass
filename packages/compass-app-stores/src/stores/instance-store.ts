@@ -1,14 +1,13 @@
 import type { MongoDBInstanceProps } from 'mongodb-instance-model';
 import { MongoDBInstance } from 'mongodb-instance-model';
 import toNS from 'mongodb-ns';
-import type { DataService } from '@mongodb-js/compass-connections/provider';
+import type {
+  ConnectionsService,
+  DataService,
+} from '@mongodb-js/compass-connections/provider';
 import type { ActivateHelpers, AppRegistry } from 'hadron-app-registry';
 import type { Logger } from '@mongodb-js/compass-logging/provider';
 import { openToast } from '@mongodb-js/compass-components';
-import {
-  ConnectionsManagerEvents,
-  type ConnectionsManager,
-} from '@mongodb-js/compass-connections/provider';
 import { MongoDBInstancesManager } from '../instances-manager';
 
 function serversArray(
@@ -43,10 +42,10 @@ function getTopologyDescription(
 export function createInstancesStore(
   {
     globalAppRegistry,
-    connectionsManager,
+    connections,
     logger: { log, mongoLogId },
   }: {
-    connectionsManager: ConnectionsManager;
+    connections: ConnectionsService;
     logger: Logger;
     globalAppRegistry: AppRegistry;
   },
@@ -63,8 +62,7 @@ export function createInstancesStore(
       }
       const instance =
         instancesManager.getMongoDBInstanceForConnection(connectionId);
-      const dataService =
-        connectionsManager.getDataServiceForConnection(connectionId);
+      const dataService = connections.getDataServiceForConnection(connectionId);
       // It is possible to get here before the databases finished loading. We have
       // to wait for the databases, otherwise it will load all the collections for
       // 0 databases.
@@ -102,8 +100,7 @@ export function createInstancesStore(
       }
       const instance =
         instancesManager.getMongoDBInstanceForConnection(connectionId);
-      const dataService =
-        connectionsManager.getDataServiceForConnection(connectionId);
+      const dataService = connections.getDataServiceForConnection(connectionId);
       isFirstRun = instance.status === 'initial';
       await instance.refresh({ dataService, ...refreshOptions });
     } catch (err: any) {
@@ -151,8 +148,7 @@ export function createInstancesStore(
       }
       const instance =
         instancesManager.getMongoDBInstanceForConnection(connectionId);
-      const dataService =
-        connectionsManager.getDataServiceForConnection(connectionId);
+      const dataService = connections.getDataServiceForConnection(connectionId);
       await instance.fetchDatabases({ dataService, force: true });
       await Promise.allSettled(
         instance.databases.map((db) =>
@@ -182,8 +178,7 @@ export function createInstancesStore(
       }
       const instance =
         instancesManager.getMongoDBInstanceForConnection(connectionId);
-      const dataService =
-        connectionsManager.getDataServiceForConnection(connectionId);
+      const dataService = connections.getDataServiceForConnection(connectionId);
       const { database } = toNS(ns);
       const db = instance.databases.get(database);
       const coll = db?.collections.get(ns);
@@ -218,13 +213,12 @@ export function createInstancesStore(
       }
       const instance =
         instancesManager.getMongoDBInstanceForConnection(connectionId);
-      const dataService =
-        connectionsManager.getDataServiceForConnection(connectionId);
+      const dataService = connections.getDataServiceForConnection(connectionId);
       const { database } = toNS(namespace);
       const db =
         instance.databases.get(database) ??
         // We might be adding collection to a new db namespace
-        instance.databases.add({ _id: database });
+        instance.databases.add({ _id: database, name: database });
       // We might be refreshing an existing namespace (in case of out stages usage
       // for example)
       let newCollection = false;
@@ -233,16 +227,21 @@ export function createInstancesStore(
         newCollection = true;
         coll = db.collections.add({ _id: namespace });
       }
-      // We don't care if this fails
-      await Promise.allSettled([
-        db.fetch({ dataService, force: true }),
-        coll.fetch({
-          dataService,
-          force: true,
-          // We only need to fetch info in case of new collection being created
-          fetchInfo: newCollection,
-        }),
-      ]);
+      // Fetch in sequence to avoid race conditions between database and
+      // collection model updates
+      await db
+        .fetch({ dataService, force: true })
+        .then(() => {
+          return coll?.fetch({
+            dataService,
+            force: true,
+            // We only need to fetch info in case of new collection being created
+            fetchInfo: newCollection,
+          });
+        })
+        .catch(() => {
+          // We don't care if this fails
+        });
     } catch (error) {
       log.warn(
         mongoLogId(1_001_000_320),
@@ -256,79 +255,73 @@ export function createInstancesStore(
     }
   };
 
-  on(
-    connectionsManager,
-    ConnectionsManagerEvents.ConnectionDisconnected,
-    function (connectionInfoId: string) {
-      try {
-        const instance =
-          instancesManager.getMongoDBInstanceForConnection(connectionInfoId);
-        instance.removeAllListeners();
-      } catch (error) {
-        log.warn(
-          mongoLogId(1_001_000_322),
-          'Instance Store',
-          'Failed to remove instance listeners upon disconnect',
-          {
-            message: (error as Error).message,
-            connectionId: connectionInfoId,
-          }
-        );
+  on(connections, 'disconnected', function (connectionInfoId: string) {
+    try {
+      const instance =
+        instancesManager.getMongoDBInstanceForConnection(connectionInfoId);
+      instance.removeAllListeners();
+    } catch (error) {
+      log.warn(
+        mongoLogId(1_001_000_322),
+        'Instance Store',
+        'Failed to remove instance listeners upon disconnect',
+        {
+          message: (error as Error).message,
+          connectionId: connectionInfoId,
+        }
+      );
+    }
+    instancesManager.removeMongoDBInstanceForConnection(connectionInfoId);
+  });
+
+  on(connections, 'connected', function (instanceConnectionId: string) {
+    const dataService =
+      connections.getDataServiceForConnection(instanceConnectionId);
+    const connectionString = dataService.getConnectionString();
+    const firstHost = connectionString.hosts[0] || '';
+    const [hostname, port] = firstHost.split(':');
+
+    const initialInstanceProps: Partial<MongoDBInstanceProps> = {
+      _id: firstHost,
+      hostname: hostname,
+      port: port ? +port : undefined,
+      topologyDescription: getTopologyDescription(
+        dataService.getLastSeenTopology()
+      ),
+    };
+    const instance = instancesManager.createMongoDBInstanceForConnection(
+      instanceConnectionId,
+      initialInstanceProps as MongoDBInstanceProps
+    );
+
+    addCleanup(() => {
+      instance.removeAllListeners();
+    });
+
+    void refreshInstance(
+      {
+        fetchDatabases: true,
+        fetchDbStats: true,
+      },
+      {
+        connectionId: instanceConnectionId,
       }
-      instancesManager.removeMongoDBInstanceForConnection(connectionInfoId);
-    }
-  );
+    );
 
-  on(
-    connectionsManager,
-    ConnectionsManagerEvents.ConnectionAttemptSuccessful,
-    function (instanceConnectionId: string, dataService: DataService) {
-      const connectionString = dataService.getConnectionString();
-      const firstHost = connectionString.hosts[0] || '';
-      const [hostname, port] = firstHost.split(':');
-
-      const initialInstanceProps: Partial<MongoDBInstanceProps> = {
-        _id: firstHost,
-        hostname: hostname,
-        port: port ? +port : undefined,
-        topologyDescription: getTopologyDescription(
-          dataService.getLastSeenTopology()
-        ),
-      };
-      const instance = instancesManager.createMongoDBInstanceForConnection(
-        instanceConnectionId,
-        initialInstanceProps as MongoDBInstanceProps
-      );
-
-      addCleanup(() => {
-        instance.removeAllListeners();
-      });
-
-      void refreshInstance(
-        {
-          fetchDatabases: true,
-          fetchDbStats: true,
-        },
-        {
-          connectionId: instanceConnectionId,
-        }
-      );
-
-      on(
-        dataService,
-        'topologyDescriptionChanged',
-        ({
-          newDescription,
-        }: {
-          newDescription: ReturnType<DataService['getLastSeenTopology']>;
-        }) => {
-          instance.set({
-            topologyDescription: getTopologyDescription(newDescription),
-          });
-        }
-      );
-    }
-  );
+    on(
+      dataService,
+      'topologyDescriptionChanged',
+      ({
+        newDescription,
+      }: {
+        newDescription: ReturnType<DataService['getLastSeenTopology']>;
+      }) => {
+        instance.set({
+          topologyDescription: getTopologyDescription(newDescription),
+        });
+      }
+    );
+  });
 
   on(
     globalAppRegistry,
@@ -341,7 +334,7 @@ export function createInstancesStore(
         const instance =
           instancesManager.getMongoDBInstanceForConnection(connectionId);
         const dataService =
-          connectionsManager.getDataServiceForConnection(connectionId);
+          connections.getDataServiceForConnection(connectionId);
         void instance.databases
           .get(databaseId)
           ?.fetchCollections({ dataService });
@@ -359,25 +352,14 @@ export function createInstancesStore(
     }
   );
 
-  on(
-    globalAppRegistry,
-    'sidebar-filter-navigation-list',
-    ({ connectionId }: { connectionId?: string } = {}) => {
-      const connectedConnectionIds = Array.from(
-        instancesManager.listMongoDBInstances().keys()
-      );
-      // connectionId will be provided by the sidebar when in single connection
-      // mode. We don't derive that from the list of connected connections
-      // because there is a possibility for us to be fetching all collections on
-      // wrong connection that way
-      const connectionIds = connectionId
-        ? [connectionId]
-        : connectedConnectionIds;
-      for (const id of connectionIds) {
-        void fetchAllCollections({ connectionId: id });
-      }
+  on(globalAppRegistry, 'sidebar-filter-navigation-list', () => {
+    const connectedConnectionIds = Array.from(
+      instancesManager.listMongoDBInstances().keys()
+    );
+    for (const id of connectedConnectionIds) {
+      void fetchAllCollections({ connectionId: id });
     }
-  );
+  });
 
   on(
     globalAppRegistry,
@@ -435,7 +417,7 @@ export function createInstancesStore(
         const instance =
           instancesManager.getMongoDBInstanceForConnection(connectionId);
         const dataService =
-          connectionsManager.getDataServiceForConnection(connectionId);
+          connections.getDataServiceForConnection(connectionId);
         const { database } = toNS(namespace);
         const db = instance.databases.get(database);
         const coll = db?.collections.get(namespace, '_id');
@@ -545,7 +527,7 @@ export function createInstancesStore(
         const instance =
           instancesManager.getMongoDBInstanceForConnection(connectionId);
         const dataService =
-          connectionsManager.getDataServiceForConnection(connectionId);
+          connections.getDataServiceForConnection(connectionId);
         const { database } = toNS(namespace);
         void instance.databases
           .get(database)
